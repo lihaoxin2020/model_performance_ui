@@ -10,6 +10,24 @@ An interactive dashboard for analyzing and comparing the performance of large la
 - **Detailed Token Distribution Visualization**: See how token length correlates with correctness
 - **Data Tables**: Access the raw data for detailed analysis
 
+## Setup
+
+### Installation
+
+1. Clone this repository
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Run the interactive dashboard:
+   ```bash
+   ./run_ui.sh
+   ```
+   or directly with Streamlit:
+   ```bash
+   streamlit run app.py
+   ```
+
 ## Running the Dashboard
 
 Simply run the provided script:
