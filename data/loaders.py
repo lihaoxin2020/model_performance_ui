@@ -89,9 +89,16 @@ def load_predictions(directory):
     predictions = []
     for pred_file in predictions_files:
         with open(pred_file, 'r') as f:
-            for line in f:
+            for idx, line in enumerate(f):
                 try:
                     pred = json.loads(line)
+                    # Add metadata about source file if not present
+                    if "metadata" not in pred:
+                        pred["metadata"] = {}
+                    pred["metadata"]["filename"] = os.path.basename(pred_file)
+                    pred["metadata"]["line_number"] = idx
+                    pred["metadata"]["directory"] = directory
+                    
                     # Add token length if not present
                     if "num_tokens" not in pred:
                         # Check if "model_output" field exists and contains continuation
