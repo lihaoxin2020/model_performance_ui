@@ -68,6 +68,8 @@ class BaseTaskHandler(ABC):
             is_correct = metrics["exact_match_flex"] == 1
         elif "accuracy" in metrics:
             is_correct = metrics["accuracy"] == 1
+        elif "correctness" in metrics:
+            is_correct = metrics["correctness"] == 1
         
         return is_correct
 
@@ -206,6 +208,275 @@ class SciBenchTaskHandler(BaseTaskHandler):
     def get_domain_selection_name(self):
         """Get selection name for domain analysis type"""
         return ["Subjects", "Difficulty Levels"]
+
+@register_task_handler("olympiadbench")
+class OlympiadBenchTaskHandler(BaseTaskHandler):
+    """Handler for OlympiadBench dataset"""
+
+    def get_domains(self, predictions=None, directory=None):
+        """Get subtask (problem) information for OlympiadBench."""
+        if not directory:
+            return None
+
+        subtasks = {}
+        # Match files like: task-000-olympiadbench_OE_TO_maths_en_COMP-predictions.jsonl
+        pattern = os.path.join(directory, "task-*-olympiadbench_*-predictions.jsonl")
+        for pred_file in glob.glob(pattern):
+            fname = os.path.basename(pred_file)
+            # Extract domain between TO_ and _COMP
+            m = re.search(r'olympiadbench_[^_]+_TO_(.+?)_COMP', fname)
+            if not m:
+                continue
+            domain = m.group(1)
+            with open(pred_file, 'r', encoding='utf-8') as f:
+                for idx, line in enumerate(f):
+                    try:
+                        obj = json.loads(line)
+                        native_id = obj.get("native_id")
+                        if native_id is None:
+                            native_id = f"{fname}:{idx}"
+                        subtasks[native_id] = domain
+                    except json.JSONDecodeError:
+                        continue
+
+        # no high_level categories; only subtasks
+        return {"high_level": {}, "subdomain": subtasks}
+
+    def get_domain_display_name(self):
+        return "Subtasks"
+
+    def get_subdomain_display_name(self):
+        return "Problems"
+
+    def get_domain_selection_name(self):
+        return ["Subtasks"]
+
+@register_task_handler("ugphysics")
+class UGPhysicsTaskHandler(BaseTaskHandler):
+    """Handler for UGPhysics dataset"""
+
+    def get_domains(self, predictions=None, directory=None):
+        """Get subtask information for UGPhysics."""
+        if not directory:
+            return None
+
+        subtasks = {}
+        # Match files like: task-000-ugphysics_Electrodynamics-predictions.jsonl
+        pattern = os.path.join(directory, "task-*-ugphysics_*-predictions.jsonl")
+        
+        for pred_file in glob.glob(pattern):
+            fname = os.path.basename(pred_file)
+            
+            # Extract the subtask between 'ugphysics_' and '-predictions'
+            m = re.search(r"task-\d+-ugphysics_(.+?)-predictions\.jsonl", fname)
+            if not m:
+                continue
+            
+            # Get the full subtask name (e.g. 'Electrodynamics')
+            subtask = m.group(1)
+            
+            # Load predictions to extract native_ids
+            with open(pred_file, 'r') as f:
+                for line in f:
+                    try:
+                        pred = json.loads(line)
+                        # Use native_id from prediction
+                        native_id = pred.get("native_id")
+                        if native_id is not None:
+                            subtasks[native_id] = subtask
+                    except json.JSONDecodeError:
+                        continue
+
+        # No high_level categories for UGPhysics—only subtasks
+        return {"high_level": {}, "subdomain": subtasks}
+
+    def get_domain_display_name(self):
+        return "Topics"
+
+    def get_subdomain_display_name(self):
+        return "Topics"
+
+    def get_domain_selection_name(self):
+        return ["Topics"]
+
+@register_task_handler("lab_bench")
+class LabBenchTaskHandler(BaseTaskHandler):
+    """Handler for LabBench dataset"""
+
+    def get_domains(self, predictions=None, directory=None):
+        """Get subtask information for LabBench."""
+        if not directory:
+            return None
+
+        print("\nLabBench get_domains - Scanning directory:", directory)
+        
+        subtasks = {}
+        # Match files like: task-000-lab_bench_CloningScenarios:cot-predictions.jsonl
+        pattern = os.path.join(directory, "task-*-lab_bench_*-predictions.jsonl")
+        
+        for pred_file in glob.glob(pattern):
+            fname = os.path.basename(pred_file)
+            
+            # Extract the subtask between 'lab_bench_' and ':cot-predictions'
+            m = re.search(r"task-\d+-lab_bench_(.+?):cot-predictions\.jsonl", fname)
+            if not m:
+                continue
+            
+            # Get the full subtask name (e.g. 'CloningScenarios')
+            subtask = m.group(1)
+            print(f"\nProcessing file: {fname}")
+            print(f"Found subtask: {subtask}")
+            
+            # Load predictions to extract native_ids
+            with open(pred_file, 'r') as f:
+                for idx, line in enumerate(f):
+                    try:
+                        pred = json.loads(line)
+                        # Create unique identifier using file and line position
+                        native_id = f"{fname}:{idx}"
+                        subtasks[native_id] = subtask
+                        if idx == 0:
+                            print(f"First mapping - {native_id} -> {subtask}")
+                    except json.JSONDecodeError:
+                        continue
+
+        print("\nDomain mapping summary:")
+        print(f"Total unique subtasks: {len(set(subtasks.values()))}")
+        print(f"Subtasks found: {sorted(set(subtasks.values()))}")
+        print(f"Total mappings: {len(subtasks)}")
+        print("Sample mappings:")
+        for i, (k, v) in enumerate(list(subtasks.items())[:5]):
+            print(f"  {k} -> {v}")
+
+        # No high_level categories for LabBench—only subtasks
+        return {"high_level": {}, "subdomain": subtasks}
+
+    def process_predictions(self, predictions):
+        """Process predictions for LabBench."""
+        print("\nProcessing LabBench predictions:")
+        print(f"Total predictions to process: {len(predictions)}")
+        
+        processed = []
+        for i, pred in enumerate(predictions):
+            # Get filename from metadata
+            metadata = pred.get("metadata", {})
+            filename = metadata.get("filename", "")
+            if not filename:
+                # If filename not in metadata, try to extract from directory path
+                directory = metadata.get("directory", "")
+                if directory:
+                    # Find the task-*-lab_bench_* file in the directory
+                    pattern = os.path.join(directory, "task-*-lab_bench_*-predictions.jsonl")
+                    matches = glob.glob(pattern)
+                    if matches:
+                        filename = os.path.basename(matches[0])
+            
+            if not filename:
+                print(f"Warning: Could not determine filename for prediction {i}")
+                continue
+                
+            # Create unique identifier using file and line position
+            line_number = metadata.get("line_number", i)
+            native_id = f"{filename}:{line_number}"
+            pred["native_id"] = native_id
+            processed.append(pred)
+            
+            if i < 5:  # Show first 5 predictions
+                print(f"  Prediction {i} - native_id: {native_id}")
+        
+        print(f"Successfully processed {len(processed)} predictions")
+        return processed
+
+    def get_domain_display_name(self):
+        return "Tasks"
+
+    def get_subdomain_display_name(self):
+        return "Tasks"
+
+    def get_domain_selection_name(self):
+        return ["Tasks"]
+
+@register_task_handler("scieval")
+class SciEvalTaskHandler(BaseTaskHandler):
+    """Handler for SciEval dataset"""
+
+    def get_domains(self, predictions=None, directory=None):
+        """Get domain information for SciEval."""
+        if not directory:
+            return None
+        
+        # Track both subjects (high-level) and combined subtasks
+        subjects = {}
+        subtasks = {}
+        
+        # Match files like: task-000-scieval_biology_scientific_calculation-predictions.jsonl
+        pattern = os.path.join(directory, "task-*-scieval_*-predictions.jsonl")
+        
+        for pred_file in glob.glob(pattern):
+            fname = os.path.basename(pred_file)
+            
+            # Extract subject and task type from filename
+            # Format: scieval_<subject>_<task_type>
+            m = re.search(r"scieval_([^_]+)_(.+?)-predictions\.jsonl", fname)
+            if not m:
+                continue
+            
+            subject = m.group(1).capitalize()  # e.g., "biology" -> "Biology"
+            task_type = m.group(2).replace("_", " ").title()  # e.g., "scientific_calculation" -> "Scientific Calculation"
+            subtask = f"{subject} - {task_type}"  # e.g., "Biology - Scientific Calculation"
+            
+            # Load predictions to extract doc_ids
+            with open(pred_file, 'r') as f:
+                for line in f:
+                    try:
+                        pred = json.loads(line)
+                        doc_id = pred.get("doc_id")
+                        if doc_id is not None:
+                            # Create unique identifier using file and doc_id
+                            native_id = f"{fname}:{doc_id}"
+                            subjects[native_id] = subject
+                            subtasks[native_id] = subtask
+                    except json.JSONDecodeError:
+                        continue
+
+        # Return both subjects and combined subtasks
+        return {"high_level": subjects, "subdomain": subtasks}
+
+    def process_predictions(self, predictions):
+        """Process predictions for SciEval."""
+        processed = []
+        for i, pred in enumerate(predictions):
+            # Get filename from metadata
+            metadata = pred.get("metadata", {})
+            filename = metadata.get("filename", "")
+            if not filename:
+                # If filename not in metadata, try to extract from directory path
+                directory = metadata.get("directory", "")
+                if directory:
+                    # Find the task-*-scieval_* file in the directory
+                    pattern = os.path.join(directory, "task-*-scieval_*-predictions.jsonl")
+                    matches = glob.glob(pattern)
+                    if matches:
+                        filename = os.path.basename(matches[0])
+            
+            if not filename or pred.get("doc_id") is None:
+                continue
+                
+            # Create unique identifier using file and doc_id
+            native_id = f"{filename}:{pred['doc_id']}"
+            pred["native_id"] = native_id
+            processed.append(pred)
+        
+        return processed
+
+    def get_domain_display_name(self):
+        return "Subjects"
+
+    def get_subdomain_display_name(self):
+        return "Tasks"
+
+    def get_domain_selection_name(self):
+        return ["Subjects", "Tasks"]
 
 class DefaultTaskHandler(BaseTaskHandler):
     """Default handler for datasets without specific implementations"""
