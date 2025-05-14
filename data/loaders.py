@@ -19,8 +19,25 @@ DATASET_INFO = {
     "scibench": {"type": "knowledge", "full_name": "SciBench"},
     "scieval": {"type": "knowledge", "full_name": "SciEval"},
     "sciknoweval": {"type": "knowledge", "full_name": "SciKnowEval"},
-    "mmlu_pro": {"type": "knowledge", "full_name": "MMLU-Pro"}
+    "mmlu_pro": {"type": "knowledge", "full_name": "MMLU-Pro"},
+    "ugphysics": {"type": "problem_solving", "full_name": "UGPhysics"},
+    "lab_bench": {"type": "problem_solving", "full_name": "Lab Bench"}
 }
+
+# Initialize tokenizer once globally
+_TOKENIZER = None
+
+def get_tokenizer():
+    """Get or initialize the tokenizer"""
+    global _TOKENIZER
+    if _TOKENIZER is None:
+        try:
+            # Try to load tokenizer in local/offline mode first
+            _TOKENIZER = AutoTokenizer.from_pretrained("gpt2", local_files_only=True)
+        except Exception:
+            # If not available locally, download with caching
+            _TOKENIZER = AutoTokenizer.from_pretrained("gpt2", use_fast=True)
+    return _TOKENIZER
 
 def extract_model_name(directory):
     """Extract model name from directory path"""
@@ -65,16 +82,21 @@ def compute_token_length(prediction):
     if "num_tokens" in prediction:
         return prediction["num_tokens"]
     
-    # Get the output text
-    output_text = prediction.get("continuation", "")
-    if not output_text:
-        return 0
+    # First try to get output from model_output field
+    if "model_output" in prediction:
+        if isinstance(prediction["model_output"], list):
+            output_text = prediction["model_output"][0].get("output", "")
+        else:
+            output_text = prediction["model_output"]
+        tokens = get_tokenizer().encode(output_text)
+        return len(tokens)
     
-    # Initialize tokenizer (using GPT-2 tokenizer as default)
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    # Fall back to continuation or output fields
+    output_text = prediction.get("continuation", None)
+    if output_text is None:
+        output_text = prediction.get("output", "")
     
-    # Tokenize and get length
-    tokens = tokenizer.encode(output_text)
+    tokens = get_tokenizer().encode(output_text)
     return len(tokens)
 
 def load_predictions(directory):
