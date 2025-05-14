@@ -307,8 +307,6 @@ class LabBenchTaskHandler(BaseTaskHandler):
         """Get subtask information for LabBench."""
         if not directory:
             return None
-
-        print("\nLabBench get_domains - Scanning directory:", directory)
         
         subtasks = {}
         # Match files like: task-000-lab_bench_CloningScenarios:cot-predictions.jsonl
@@ -324,8 +322,6 @@ class LabBenchTaskHandler(BaseTaskHandler):
             
             # Get the full subtask name (e.g. 'CloningScenarios')
             subtask = m.group(1)
-            print(f"\nProcessing file: {fname}")
-            print(f"Found subtask: {subtask}")
             
             # Load predictions to extract native_ids
             with open(pred_file, 'r') as f:
@@ -335,26 +331,14 @@ class LabBenchTaskHandler(BaseTaskHandler):
                         # Create unique identifier using file and line position
                         native_id = f"{fname}:{idx}"
                         subtasks[native_id] = subtask
-                        if idx == 0:
-                            print(f"First mapping - {native_id} -> {subtask}")
                     except json.JSONDecodeError:
                         continue
-
-        print("\nDomain mapping summary:")
-        print(f"Total unique subtasks: {len(set(subtasks.values()))}")
-        print(f"Subtasks found: {sorted(set(subtasks.values()))}")
-        print(f"Total mappings: {len(subtasks)}")
-        print("Sample mappings:")
-        for i, (k, v) in enumerate(list(subtasks.items())[:5]):
-            print(f"  {k} -> {v}")
 
         # No high_level categories for LabBench—only subtasks
         return {"high_level": {}, "subdomain": subtasks}
 
     def process_predictions(self, predictions):
         """Process predictions for LabBench."""
-        print("\nProcessing LabBench predictions:")
-        print(f"Total predictions to process: {len(predictions)}")
         
         processed = []
         for i, pred in enumerate(predictions):
@@ -380,11 +364,8 @@ class LabBenchTaskHandler(BaseTaskHandler):
             native_id = f"{filename}:{line_number}"
             pred["native_id"] = native_id
             processed.append(pred)
-            
-            if i < 5:  # Show first 5 predictions
-                print(f"  Prediction {i} - native_id: {native_id}")
+
         
-        print(f"Successfully processed {len(processed)} predictions")
         return processed
 
     def get_domain_display_name(self):
