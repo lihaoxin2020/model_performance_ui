@@ -77,4 +77,30 @@ By default, the dashboard looks for an "outputs" directory at the same level as 
 
 ## Adding New Datasets
 
-To add support for new datasets, modify the `get_dataset_domains` function in `data/loaders.py` with appropriate domain extraction logic for your dataset. 
+To add support for new datasets, modify the `get_dataset_domains` function in `data/loaders.py` with appropriate domain extraction logic for your dataset.
+
+## Beaker Integration
+
+The Model Performance UI now supports downloading and comparing evaluation results directly from Beaker jobs. This feature allows you to:
+
+1. Download evaluation results from any Beaker job by providing the job ID
+2. Import the results into the UI for comparison with other models
+3. Compare performance across different models and datasets
+
+### Using the Beaker Integration
+
+1. Ensure you have `beaker-py` installed (included in requirements.txt)
+2. Configure your Beaker credentials (typically via `~/.beaker/config.yml` or the `BEAKER_TOKEN` environment variable)
+3. In the sidebar, expand the "Import From Beaker" section
+4. Enter a Beaker job ID and optional model name
+5. Click "Download & Import Job Results"
+6. Once imported, the model will appear in the model selection dropdown
+
+### Requirements for Beaker Jobs
+
+For a Beaker job to be compatible with the Model Performance UI, it should:
+
+1. Have a `metrics.json` file in the output
+2. Include prediction files named according to the pattern `task-*-dataset-predictions.jsonl`
+
+These are typically the output format of evaluation jobs run with frameworks like lm-evaluation-harness. 

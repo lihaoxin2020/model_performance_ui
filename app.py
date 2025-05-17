@@ -4,9 +4,10 @@ Main application for Model Performance UI
 """
 import streamlit as st
 import os
+import argparse
 
 # Import UI components
-from utils.ui_components import display_header, sidebar_model_selection
+from utils.ui_components import display_header, sidebar_model_selection, beaker_job_import_component
 
 # Import data loading functions
 from data.loaders import load_model_data, load_domain_data
@@ -15,6 +16,17 @@ from data.loaders import load_model_data, load_domain_data
 from visualizations.model_comparison import display_model_comparison
 from visualizations.length_analysis import display_length_analysis
 from visualizations.domain_analysis import display_domain_analysis
+
+def parse_args():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description="Model Performance Dashboard")
+    parser.add_argument(
+        "--input-dir",
+        type=str,
+        help="Default directory containing model prediction files",
+        default=None
+    )
+    return parser.parse_args()
 
 # Set page configuration
 st.set_page_config(
@@ -25,17 +37,30 @@ st.set_page_config(
 )
 
 def main():
+    # Parse command line arguments
+    args = parse_args()
+    
     # Display header
     display_header()
     
     # Set up cache and session state
     if 'input_dir' not in st.session_state:
-        # Set default to look for outputs in parent directory
-        default_output_dir = "../outputs"
-        if os.path.exists(default_output_dir):
-            st.session_state.input_dir = default_output_dir
+        # Use command line argument if provided, otherwise use default
+        if args.input_dir:
+            st.session_state.input_dir = args.input_dir
         else:
-            st.session_state.input_dir = "outputs"  # Fallback to current directory
+            # Set default to look for outputs in parent directory
+            default_output_dir = "../outputs"
+            if os.path.exists(default_output_dir):
+                st.session_state.input_dir = default_output_dir
+            else:
+                st.session_state.input_dir = "outputs"  # Fallback to current directory
+                # Create the directory if it doesn't exist
+                os.makedirs(st.session_state.input_dir, exist_ok=True)
+    
+    # Add a flag to force reload when Beaker data is imported
+    if 'force_reload' not in st.session_state:
+        st.session_state.force_reload = False
     
     # Input directory selection
     with st.expander("Settings", expanded=False):
@@ -50,9 +75,17 @@ def main():
             # Use a button to force cache invalidation
             st.button("Reload Data")
     
+    # Beaker integration component in the sidebar
+    beaker_imported = beaker_job_import_component(st.session_state.input_dir)
+    if beaker_imported:
+        st.session_state.force_reload = True
+        st.rerun()
+    
     # Load data
     with st.spinner("Loading model data..."):
         performance_df, all_models, model_datasets = load_model_data(st.session_state.input_dir)
+        # Reset the force_reload flag after loading
+        st.session_state.force_reload = False
     
     if performance_df.empty:
         st.error(f"No model prediction files found in '{st.session_state.input_dir}'")
