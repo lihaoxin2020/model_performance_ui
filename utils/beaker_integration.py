@@ -10,6 +10,7 @@ from typing import Optional, List
 # Import beaker client
 try:
     from beaker import Beaker
+    from beaker.exceptions import JobNotFound, ExperimentNotFound
     BEAKER_AVAILABLE = True
 except ImportError:
     BEAKER_AVAILABLE = False
@@ -26,12 +27,12 @@ def check_beaker_available():
     except Exception as e:
         return False, f"Beaker client initialization failed: {str(e)}"
 
-def download_job_results(job_id: str, output_dir: Optional[str] = None) -> tuple[bool, str, Optional[str]]:
+def download_experiment_results(experiment_id: str, output_dir: Optional[str] = None) -> tuple[bool, str, Optional[str]]:
     """
-    Download all output files from a Beaker job by its ID.
+    Download all output files from a Beaker experiment by its ID.
     
     Args:
-        job_id (str): The Beaker job ID
+        experiment_id (str): The Beaker experiment ID
         output_dir (str, optional): Directory where files will be saved.
                                    If None, uses the input directory from Streamlit session state.
     
@@ -56,58 +57,36 @@ def download_job_results(job_id: str, output_dir: Optional[str] = None) -> tuple
         output_path = Path(output_dir)
         os.makedirs(output_path, exist_ok=True)
         
-        # Get job information
-        job = beaker.job.get(job_id)
-        
-        # Check if job exists
-        if not job:
-            return False, f"Job with ID {job_id} not found.", None
+        # Get experiment information
+        try:
+            experiment = beaker.experiment.get(experiment_id)
+        except ExperimentNotFound as e:
+            return False, f"Experiment with ID {experiment_id} not found.", None
         
         # Find the result dataset using a different approach
-        # First, try to use the job's task ID to check for associated results
+        # First, try to use the experiment's task ID to check for associated results
         result_dataset_id = None
         
-        # Check job status for completion
-        if hasattr(job, 'status'):
+        # Check experiment status for completion
+        for job in experiment.jobs:
+            # if hasattr(job, 'status'):
             if not job.status.finalized:
-                return False, f"Job {job_id} is not yet finalized. Wait for the job to complete.", None
+                return False, f"Experiment {experiment_id} is not yet finalized. Wait for the experiment to complete.", None
         
-        # Use the beaker HTTP API to get job execution details
+        # Use the beaker HTTP API to get experiment execution details
         try:
-            # Make a direct HTTP request to get job details with execution info
-            # job_details = beaker.http_request(f"jobs/{job_id}").json()
-            
-            # Check if job has a result in the execution
-            result_dataset_id = beaker.job.results(job_id).id
+            # Check if experiment has a result in the execution
+            result_dataset_id = beaker.experiment.results(experiment_id).id
             
         except Exception:
             # If HTTP request fails, try alternative methods
             pass
         
         # If we still don't have a result dataset ID, try using a workload
-        # if not result_dataset_id and hasattr(job, 'workload_id'):
-        #     try:
-        #         # Get workload details
-        #         workload = beaker.workload.get(job.workload_id)
-                
-        #         # Check if workload has jobs with results
-        #         for workload_job in beaker.workload.jobs(workload):
-        #             if workload_job.id == job_id:
-        #                 # Try to get result from REST API
-        #                 job_details = beaker.http_request(f"jobs/{job_id}").json()
-        #                 if 'execution' in job_details and 'result' in job_details['execution']:
-        #                     if 'beaker' in job_details['execution']['result']:
-        #                         result_dataset_id = job_details['execution']['result']['beaker']
-        #                         break
-        #     except Exception:
-        #         # If workload methods fail, continue
-        #         pass
-        
-        # As a last resort, try to fetch the dataset using a direct naming convention
         if not result_dataset_id:
             try:
-                # Some jobs store results in a dataset with the same name as the job ID
-                result_datasets = list(beaker.dataset.list(name_or_description=job_id, limit=1))
+                # Some experiments store results in a dataset with the same name as the experiment ID
+                result_datasets = list(beaker.dataset.list(name_or_description=experiment_id, limit=1))
                 if result_datasets:
                     result_dataset_id = result_datasets[0].id
             except Exception:
@@ -116,38 +95,28 @@ def download_job_results(job_id: str, output_dir: Optional[str] = None) -> tuple
         
         # If we still can't find a result dataset, return an error
         if not result_dataset_id:
-            return False, f"No result dataset found for job {job_id}. The job may not have completed successfully or doesn't have results.", None
+            return False, f"No result dataset found for experiment {experiment_id}. The experiment may not have completed successfully or doesn't have results.", None
             
         # Download the dataset files
         try:
             # Get the dataset object
-            job_details = job.to_json()
             dataset = beaker.dataset.get(result_dataset_id)
             
             # Fetch the files from the result dataset
-            dir_name = None
-
-            env_vars = job_details['execution']['spec']['envVars']
-
-            for env_var in env_vars:
-                if env_var['name'] == 'BEAKER_EXPERIMENT_NAME':
-                    dir_name = env_var['value']
-                    break
-            assert dir_name is not None, "No experiment name found in job environment variables"
-            output_job_path = output_path / dir_name
-            # from IPython import embed
-            # embed()
-            beaker.dataset.fetch(dataset, target=output_job_path)
+            dir_name = experiment.name
+            assert dir_name is not None, "No experiment name found in experiment environment variables"
+            output_experiment_path = output_path / dir_name
+            beaker.dataset.fetch(dataset, target=output_experiment_path)
             
-            return True, f"Successfully downloaded all results for job {job_id}", str(output_job_path)
+            return True, f"Successfully downloaded all results for experiment {experiment_id}", str(output_experiment_path)
         
         except FileExistsError as e:
-            return True, f"Local directory already exists: {str(e)}", str(output_job_path)
+            return True, f"Local directory already exists: {str(e)}", str(output_experiment_path)
         except Exception as e:
             return False, f"Error downloading dataset files: {str(e)}", None
     
     except Exception as e:
-        return False, f"Error downloading job outputs: {str(e)}", None
+        return False, f"Error downloading experiment outputs: {str(e)}", None
 
 def process_downloaded_job(job_path: str) -> Optional[dict]:
     """

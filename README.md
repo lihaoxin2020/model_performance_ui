@@ -1,106 +1,182 @@
-# Model Performance Analysis UI
+# Model Performance Analyzer
 
-An interactive dashboard for analyzing and comparing the performance of large language models across multiple datasets and evaluation tasks.
+This tool analyzes model performance across different benchmarks by comparing predictions against reference datasets from Hugging Face. By default, it uses the ReasoningIntensiveStrict dataset, but can be configured to use any HuggingFace dataset.
 
-## Features
+## Requirements
 
-- **Interactive Model Comparison**: Compare performance of multiple models side-by-side
-- **Output Length Analysis**: Visualize and analyze token length distributions
-- **Domain-specific Performance**: Explore model strengths and weaknesses across different domains
-- **Detailed Token Distribution Visualization**: See how token length correlates with correctness
-- **Data Tables**: Access the raw data for detailed analysis
-
-## Setup
-
-### Installation
-
-1. Clone this repository
-2. Install dependencies:
+Install the required packages:
    ```bash
    pip install -r requirements.txt
    ```
-3. Run the interactive dashboard:
-   ```bash
-   ./run_ui.sh
-   ```
-   or directly with Streamlit:
-   ```bash
-   streamlit run app.py
-   ```
-
-## Running the Dashboard
-
-Simply run the provided script:
-
-```bash
-./run_ui.sh
-```
-
-This will:
-1. Check for and install any required dependencies
-2. Start the Streamlit server (default port: 8501)
-3. Open the dashboard in your web browser
 
 ## Directory Structure
 
+The program works with nested directory structures where model predictions are stored in files with paths like:
 ```
-model_performance_ui/
-├── app.py                # Main application entry point
-├── run_ui.sh             # Script to run the application
-├── setup.py              # Dependencies list
-├── data/                 # Data loading and processing modules
-├── visualizations/       # Visualization components
-└── utils/                # Utility functions
+predictions_dir/
+  lmeval-model1-on-benchmark1-1234567890/
+    task-000-subtask1-predictions.jsonl
+    task-001-subtask2-predictions.jsonl
+    metrics.json
+  lmeval-model2-on-benchmark1-1234567890/
+    task-000-subtask1-predictions.jsonl
+    ...
+  model_dir/
+    lmeval-model1-on-benchmark2-1234567890/
+      task-000-subtask3-predictions.jsonl
+      ...
 ```
+
+The tool handles various directory structures and naming patterns:
+- Model directories with pattern: `lmeval-[model_name]-on-[benchmark_name]-[hash]`
+- Prediction files with task names embedded in the filename: `task-000-[task_name]-predictions.jsonl`
+- Deeply nested prediction files in subdirectories
 
 ## Usage
 
-In the dashboard:
-
-1. Use the sidebar to select models to compare
-2. Choose datasets to analyze
-3. Select domain analysis type (high-level or subdomains)
-4. Navigate between different visualizations using the tabs
-
-## Input Data Format
-
-The system expects model prediction files in the following directory structure:
-
-```
-outputs/
-└── lmeval-<model_name>-on-<dataset_name>-<hash>/
-    ├── metrics.json
-    └── task-000-<dataset_name>-predictions.jsonl
+Basic usage:
+```bash
+python performance_analyzer.py /path/to/predictions/directory
 ```
 
-By default, the dashboard looks for an "outputs" directory at the same level as the model_performance_ui directory. You can customize this location in the Settings panel.
+This will automatically generate a TSV file named `[model_name]-[dataset_name]-results.tsv`. If multiple models are analyzed, the file will be named `combined-[dataset_name]-results.tsv`.
 
-## Adding New Datasets
+### Using a custom dataset
 
-To add support for new datasets, modify the `get_dataset_domains` function in `data/loaders.py` with appropriate domain extraction logic for your dataset.
+By default, the program uses the ReasoningIntensiveStrict dataset, but you can specify any HuggingFace dataset:
 
-## Beaker Integration
+```bash
+python performance_analyzer.py /path/to/predictions/directory --dataset another-dataset/custom-dataset-name
+```
 
-The Model Performance UI now supports downloading and comparing evaluation results directly from Beaker jobs. This feature allows you to:
+### Other options
 
-1. Download evaluation results from any Beaker job by providing the job ID
-2. Import the results into the UI for comparison with other models
-3. Compare performance across different models and datasets
+You can also specify a custom output file:
+```bash
+python performance_analyzer.py /path/to/predictions/directory --output custom_name.tsv
+```
 
-### Using the Beaker Integration
+To list all tasks in the dataset:
+```bash
+python performance_analyzer.py /path/to/predictions/directory --list-dataset-tasks
+```
 
-1. Ensure you have `beaker-py` installed (included in requirements.txt)
-2. Configure your Beaker credentials (typically via `~/.beaker/config.yml` or the `BEAKER_TOKEN` environment variable)
-3. In the sidebar, expand the "Import From Beaker" section
-4. Enter a Beaker job ID and optional model name
-5. Click "Download & Import Job Results"
-6. Once imported, the model will appear in the model selection dropdown
+## Command Line Options
 
-### Requirements for Beaker Jobs
+```
+positional arguments:
+  predictions_dir       Directory containing model prediction directories
 
-For a Beaker job to be compatible with the Model Performance UI, it should:
+options:
+  -h, --help            Show this help message and exit
+  --output OUTPUT       Output file path (defaults to [model_name]-[dataset_name]-results.tsv)
+  --dataset DATASET     HuggingFace dataset to use for matching (default: ArpanSarkar/ReasoningIntensiveStrict)
+  --verbose             Enable verbose output
+  --list-dataset-tasks  List all tasks in the specified dataset and exit
+```
 
-1. Have a `metrics.json` file in the output
-2. Include prediction files named according to the pattern `task-*-dataset-predictions.jsonl`
+## Task Matching
 
-These are typically the output format of evaluation jobs run with frameworks like lm-evaluation-harness. 
+The program uses several strategies to match instances from prediction files with the reference dataset:
+
+1. **Task Name Matching**:
+   - Matches using lowercase task names for case-insensitivity
+   - Extracts simplified task names by removing benchmark prefixes (e.g., "scieval_physics" → "physics")
+   - Tries multiple task name variants from both the prediction file and directory structure
+
+2. **Document ID Matching**:
+   - Looks for document IDs in various fields ('doc_id', 'id', 'example_id', 'instance_id')
+   - Converts all IDs to strings for consistent matching
+
+3. **Task Extraction from File Paths**:
+   - Extracts task names from file paths using regex patterns
+   - Checks both filenames and parent directories for task names
+   - Falls back to benchmark names if specific task names aren't found
+
+## Performance Calculation
+
+The program uses the following approaches to calculate performance metrics, in order of preference:
+
+1. **Pre-calculated metrics** - Uses these fields if available:
+   - `exact_match_flex` - Direct accuracy metric
+   - `exact_match_simple` - Alternative exact match metric 
+   - `correctness` - Binary correctness indicator (0 or 1)
+   - Metrics within a nested `metrics` dictionary containing any of the above fields
+
+2. **Direct comparison** - Falls back to comparing these fields:
+   - `prediction` vs `label`
+   - Other variations of prediction/label fields
+
+This approach allows the program to work with a variety of evaluation output formats.
+
+## Data Format
+
+The program is flexible with JSON/JSONL data formats and field names:
+- For task names: `task`, `taskname`, or `task_name`
+- For predictions: `prediction`, `pred`, `output`, `generated`, `prediction_text`, or `completion`
+- For ground truth: `label`, `target`, `ground_truth`, `answer`, `label_text`, or `correct_answer`
+- For metrics: `exact_match_flex`, `exact_match_simple`, `correctness`, or nested `metrics` dictionary
+
+## Output
+
+The program generates a TSV (Tab-Separated Values) file containing:
+- Model name (extracted from directory name)
+- Benchmark name (extracted from directory name)
+- Task name (extracted from file path or data)
+- Accuracy
+- Number of instances
+
+The TSV file also includes summary rows:
+- `BENCHMARK_AVERAGE` rows showing weighted average accuracy for each benchmark
+- `MODEL_AVERAGE` rows showing weighted average accuracy across all benchmarks for each model
+
+Output file naming:
+- If analyzing one model: `[model_name]-[dataset_name]-results.tsv`
+- If analyzing multiple models: `combined-[dataset_name]-results.tsv`
+- Can be overridden with the `--output` parameter
+
+The program also prints overall statistics by model and by model-benchmark combination.
+
+## Troubleshooting
+
+If no matching instances are found:
+1. Use the `--list-dataset-tasks` flag to see what tasks are available in the dataset
+2. Check if your prediction files have task names that match those in the dataset
+3. Verify that your prediction files contain document IDs that match the dataset
+4. Use the `--verbose` flag for additional debugging information
+
+## Example
+
+If you have a directory structure like:
+```
+eval_results/
+  qwen-insturct-synthetic_1-sft-sciriff-grpo/
+    lmeval-qwen-insturct-synthetic_1-sft-sciriff-grpo-on-gpqa-3a4ccb006b/
+      task-000-gpqa-predictions.jsonl
+  gpt4-results/
+    lmeval-gpt-4-on-gsm8k-0987654321/
+      task-000-gsm8k-predictions.jsonl
+```
+
+Run with default dataset:
+```bash
+python performance_analyzer.py eval_results
+```
+
+This will generate output files:
+- `qwen-insturct-synthetic_1-sft-sciriff-grpo-ReasoningIntensiveStrict-results.tsv`
+- `gpt-4-ReasoningIntensiveStrict-results.tsv`
+
+Or with a custom dataset:
+```bash
+python performance_analyzer.py eval_results --dataset allenai/rainbow
+```
+
+This will generate output files:
+- `qwen-insturct-synthetic_1-sft-sciriff-grpo-rainbow-results.tsv`
+- `gpt-4-rainbow-results.tsv`
+
+These files will contain:
+1. Performance metrics for each task within each benchmark
+2. Benchmark averages for each model
+3. Overall model averages across all benchmarks 

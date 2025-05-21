@@ -3,7 +3,7 @@ UI component utilities for the model performance dashboard
 """
 import streamlit as st
 from data.task_handlers import BaseTaskHandler
-from utils.beaker_integration import check_beaker_available, download_job_results
+from utils.beaker_integration import check_beaker_available, download_experiment_results
 from utils.data_processing import import_beaker_job_results
 
 def display_header():
@@ -155,7 +155,7 @@ def beaker_job_import_component(input_dir):
             progress_text.info(f"Downloading results for job {job_id}...")
             
             # Download the job results
-            success, message, download_path = download_job_results(job_id)
+            success, message, download_path = download_experiment_results(job_id)
             
             if not success:
                 # Add more context to the error message for common problems
