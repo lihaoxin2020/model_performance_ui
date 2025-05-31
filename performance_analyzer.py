@@ -63,6 +63,9 @@ class ModelPerformanceAnalyzer:
         """
         mapping = {}
         for item in self.reference_dataset['train']:
+            # Skip items with LitQA2, DbQA, or SuppQA in taskname
+            if any(x in item['taskname'] for x in ['LitQA2', 'DbQA', 'SuppQA']):
+                continue
             task_name = item['taskname']
             doc_id = str(item['doc_id'])
             mapping[(task_name, doc_id)] = True
