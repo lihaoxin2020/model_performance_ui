@@ -79,26 +79,6 @@ class ModelPerformanceAnalyzer:
         mapping = {}
         has_requires_math_field = 'requires_math' in self.math_reference_dataset['train'].features
         
-        # Math-related task name patterns
-        math_task_patterns = [
-            'math', 'algebra', 'geometry', 'calculus', 'arithmetic', 'trigonometry',
-            'statistics', 'probability', 'number_theory', 'combinatorics',
-            'mmlu_pro_math', 'hendrycks_math', 'minerva_math', 'deepmind_math',
-            'scibench', 'sat_math', 'aime', 'amc'
-        ]
-        
-        # Math-related keywords in questions
-        math_keywords = [
-            'calculate', 'compute', 'solve', 'equation', 'formula', 'theorem',
-            'derivative', 'integral', 'matrix', 'vector', 'polynomial',
-            'logarithm', 'exponential', 'coefficient', 'probability',
-            'factorial', 'permutation', 'combination', 'geometric',
-            'algebraic', 'trigonometric', 'cosine', 'sine', 'tangent',
-            'sum', 'product', 'quotient', 'remainder', 'prime', 'factor',
-            'square root', 'cube root', 'absolute value', 'inequality',
-            '$', '\\(', '\\)', '\\[', '\\]', '$$', 'frac{', '\\sqrt{'
-        ]
-        
         for item in self.math_reference_dataset['train']:
             task_name = item['taskname']
             doc_id = item['doc_id']
