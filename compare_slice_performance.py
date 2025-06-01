@@ -278,7 +278,6 @@ def main():
         on='doc_id',
         how='inner'
     )
-    from IPython import embed; embed()
 
     if eval_B_on_target_slice.empty:
         print(f"Model B (task '{task_B_eval_key}') has no predictions for any of the {num_target_instances} target instances based on 'doc_id'.")
