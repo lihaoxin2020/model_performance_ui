@@ -3,9 +3,15 @@ Data processing utilities for integrating external results into the model perfor
 """
 import os
 import json
+import pickle
 import shutil
+import hashlib
 from pathlib import Path
 import uuid
+from typing import Dict, Any, Optional, Tuple
+import pandas as pd
+import streamlit as st
+from datetime import datetime
 
 def import_beaker_job_results(beaker_job_path, output_dir, model_name=None):
     """
@@ -85,4 +91,141 @@ def import_beaker_job_results(beaker_job_path, output_dir, model_name=None):
         if file.is_file():
             shutil.copy2(file, dest_path)
     
-    return True, f"Successfully imported Beaker job results as {dest_dir_name}", str(dest_path) 
+    return True, f"Successfully imported Beaker job results as {dest_dir_name}", str(dest_path)
+
+def get_cache_key(data_identifier: str, selected_models: list, selected_datasets: list) -> str:
+    """Generate a cache key based on data identifier and selections"""
+    key_data = {
+        "identifier": data_identifier,
+        "models": sorted(selected_models),
+        "datasets": sorted(selected_datasets)
+    }
+    key_str = json.dumps(key_data, sort_keys=True)
+    return hashlib.md5(key_str.encode()).hexdigest()
+
+def get_cache_dir() -> Path:
+    """Get the cache directory for storing processed data"""
+    if 'input_dir' in st.session_state:
+        cache_dir = Path(st.session_state.input_dir) / ".cache"
+    else:
+        cache_dir = Path(".cache")
+    
+    cache_dir.mkdir(exist_ok=True)
+    return cache_dir
+
+def save_to_cache(cache_key: str, data: Any, cache_type: str = "general") -> bool:
+    """
+    Save data to cache
+    
+    Args:
+        cache_key (str): Unique identifier for the cached data
+        data (Any): Data to cache
+        cache_type (str): Type of cache (general, domain, predictions, etc.)
+    
+    Returns:
+        bool: True if saved successfully
+    """
+    try:
+        cache_dir = get_cache_dir() / cache_type
+        cache_dir.mkdir(exist_ok=True)
+        
+        cache_file = cache_dir / f"{cache_key}.pkl"
+        with open(cache_file, 'wb') as f:
+            pickle.dump({
+                "data": data,
+                "timestamp": datetime.now().isoformat(),
+                "cache_key": cache_key
+            }, f)
+        
+        return True
+    except Exception as e:
+        st.warning(f"Failed to save to cache: {str(e)}")
+        return False
+
+def load_from_cache(cache_key: str, cache_type: str = "general", max_age_hours: int = 24) -> Optional[Any]:
+    """
+    Load data from cache
+    
+    Args:
+        cache_key (str): Unique identifier for the cached data
+        cache_type (str): Type of cache (general, domain, predictions, etc.)
+        max_age_hours (int): Maximum age of cache in hours
+    
+    Returns:
+        Any: Cached data if available and not expired, None otherwise
+    """
+    try:
+        cache_dir = get_cache_dir() / cache_type
+        cache_file = cache_dir / f"{cache_key}.pkl"
+        
+        if not cache_file.exists():
+            return None
+        
+        with open(cache_file, 'rb') as f:
+            cached_data = pickle.load(f)
+        
+        # Check if cache is not too old
+        cache_time = datetime.fromisoformat(cached_data["timestamp"])
+        current_time = datetime.now()
+        age_hours = (current_time - cache_time).total_seconds() / 3600
+        
+        if age_hours > max_age_hours:
+            # Remove expired cache
+            cache_file.unlink()
+            return None
+        
+        return cached_data["data"]
+    except Exception as e:
+        # If there's any error loading cache, just return None
+        return None
+
+def clear_cache(cache_type: Optional[str] = None) -> bool:
+    """
+    Clear cache files
+    
+    Args:
+        cache_type (str, optional): Specific cache type to clear. If None, clears all cache.
+    
+    Returns:
+        bool: True if cleared successfully
+    """
+    try:
+        cache_dir = get_cache_dir()
+        
+        if cache_type:
+            cache_subdir = cache_dir / cache_type
+            if cache_subdir.exists():
+                shutil.rmtree(cache_subdir)
+        else:
+            if cache_dir.exists():
+                shutil.rmtree(cache_dir)
+        
+        return True
+    except Exception as e:
+        st.warning(f"Failed to clear cache: {str(e)}")
+        return False
+
+def get_cache_info() -> Dict[str, Any]:
+    """Get information about cache usage"""
+    cache_dir = get_cache_dir()
+    
+    if not cache_dir.exists():
+        return {"total_size": 0, "file_count": 0, "cache_types": []}
+    
+    total_size = 0
+    file_count = 0
+    cache_types = []
+    
+    for cache_type_dir in cache_dir.iterdir():
+        if cache_type_dir.is_dir():
+            cache_types.append(cache_type_dir.name)
+            for cache_file in cache_type_dir.glob("*.pkl"):
+                total_size += cache_file.stat().st_size
+                file_count += 1
+    
+    return {
+        "total_size": total_size,
+        "file_count": file_count,
+        "cache_types": cache_types,
+        "size_mb": total_size / (1024 * 1024)
+    } 

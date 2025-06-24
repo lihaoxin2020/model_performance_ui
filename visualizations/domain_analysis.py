@@ -8,7 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from data.task_handlers import BaseTaskHandler
 
-def display_dataset_domain_analysis(domain_df, subdomain_df, dataset, predictions_data):
+def display_dataset_domain_analysis(domain_df, subdomain_df, dataset, predictions_data, plot_models=None):
     """Display domain analysis for a specific dataset"""
     # Skip if there's no data
     if domain_df.empty and subdomain_df.empty:
@@ -17,6 +17,13 @@ def display_dataset_domain_analysis(domain_df, subdomain_df, dataset, prediction
     # Filter for this dataset
     dataset_domain_df = domain_df[domain_df['dataset'] == dataset] if not domain_df.empty else pd.DataFrame()
     dataset_subdomain_df = subdomain_df[subdomain_df['dataset'] == dataset] if not subdomain_df.empty else pd.DataFrame()
+    
+    # Filter by plot_models if specified
+    if plot_models:
+        if not dataset_domain_df.empty:
+            dataset_domain_df = dataset_domain_df[dataset_domain_df['model'].isin(plot_models)]
+        if not dataset_subdomain_df.empty:
+            dataset_subdomain_df = dataset_subdomain_df[dataset_subdomain_df['model'].isin(plot_models)]
     
     if dataset_domain_df.empty and dataset_subdomain_df.empty:
         return
@@ -71,7 +78,7 @@ def display_dataset_domain_analysis(domain_df, subdomain_df, dataset, prediction
     with domain_tabs[tab_index]:
         # Filter predictions for current dataset
         dataset_preds = [(directory, row) for directory, row in predictions_data if row['dataset'] == dataset]
-        display_dataset_length_histograms(dataset_preds, dataset)
+        display_dataset_length_histograms(dataset_preds, dataset, plot_models)
         
     tab_index += 1
     
@@ -234,7 +241,7 @@ def display_domain_table(analysis_df, domain_col, display_name):
         }
     )
 
-def display_dataset_length_histograms(dataset_predictions, dataset_name):
+def display_dataset_length_histograms(dataset_predictions, dataset_name, plot_models=None):
     """Display token length histograms for a specific dataset"""
     if not dataset_predictions:
         st.warning("No prediction data available for token length analysis.")
@@ -245,7 +252,13 @@ def display_dataset_length_histograms(dataset_predictions, dataset_name):
     st.subheader(f"Token Length Distribution for {dataset_display}")
     
     # Get all models from the prediction data
-    models = set(row['model'] for _, row in dataset_predictions)
+    all_models = set(row['model'] for _, row in dataset_predictions)
+    
+    # Filter by plot_models if specified
+    if plot_models:
+        models = set(model for model in all_models if model in plot_models)
+    else:
+        models = all_models
     
     # Create columns for the plots based on number of models
     num_models = len(models)
@@ -366,7 +379,7 @@ def display_dataset_length_histograms(dataset_predictions, dataset_name):
         # Move to next column
         col_idx += 1
 
-def display_domain_analysis(domain_df, subdomain_df, selected_datasets, predictions_data):
+def display_domain_analysis(domain_df, subdomain_df, selected_datasets, predictions_data, plot_models=None):
     """Display domain analysis visualizations for all selected datasets"""
     if domain_df.empty and subdomain_df.empty and not predictions_data:
         st.warning("No domain data available for the selected models and datasets.")
@@ -374,4 +387,4 @@ def display_domain_analysis(domain_df, subdomain_df, selected_datasets, predicti
         
     # Create a separate analysis section for each dataset
     for dataset in selected_datasets:
-        display_dataset_domain_analysis(domain_df, subdomain_df, dataset, predictions_data) 
+        display_dataset_domain_analysis(domain_df, subdomain_df, dataset, predictions_data, plot_models) 

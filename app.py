@@ -7,7 +7,7 @@ import os
 import argparse
 
 # Import UI components
-from utils.ui_components import display_header, sidebar_model_selection, beaker_job_import_component
+from utils.ui_components import display_header, sidebar_model_selection, beaker_job_import_component, beaker_import_main_component
 
 # Import data loading functions
 from data.loaders import load_model_data, load_domain_data
@@ -91,33 +91,49 @@ def main():
         st.error(f"No model prediction files found in '{st.session_state.input_dir}'")
         return
     
-    # Create sidebar for model selection
-    selected_models, selected_datasets = sidebar_model_selection(all_models, model_datasets)
+    # Create sidebar for model selection (now returns three values)
+    selected_models, selected_datasets, plot_models = sidebar_model_selection(all_models, model_datasets)
     
-    # Display visualizations
-    if not selected_models or not selected_datasets:
-        st.warning("Please select at least one model and one dataset.")
-    else:
-        # Display model comparison
-        display_model_comparison(performance_df, selected_models, selected_datasets)
-        
-        # Display length analysis
-        display_length_analysis(performance_df, selected_models, selected_datasets)
-        
-        # Collect predictions data for the histograms
-        predictions_data = []
-        for _, row in performance_df[
-            (performance_df['model'].isin(selected_models)) & 
-            (performance_df['dataset'].isin(selected_datasets))
-        ].iterrows():
-            predictions_data.append((row['directory'], row))
-        
-        # Load and display domain analysis
-        with st.spinner("Loading domain data..."):
-            domain_df, subdomain_df = load_domain_data(selected_models, selected_datasets, performance_df)
-        
-        # Display domain analysis for all selected datasets, including token length histograms
-        display_domain_analysis(domain_df, subdomain_df, selected_datasets, predictions_data)
+    # Create main content tabs
+    main_tab1, main_tab2 = st.tabs(["📊 Model Performance Analysis", "🔬 Import From Beaker"])
+    
+    with main_tab1:
+        # Display visualizations
+        if not selected_models or not selected_datasets:
+            st.warning("Please select at least one model and one dataset.")
+        elif not plot_models:
+            st.warning("Please select models to plot in the sidebar.")
+        else:
+            # Display model comparison with selected plot models
+            display_model_comparison(performance_df, plot_models, selected_datasets)
+            
+            # Display length analysis with selected plot models
+            display_length_analysis(performance_df, plot_models, selected_datasets)
+            
+            # Collect predictions data for the histograms (using all selected models for data loading)
+            predictions_data = []
+            for _, row in performance_df[
+                (performance_df['model'].isin(selected_models)) & 
+                (performance_df['dataset'].isin(selected_datasets))
+            ].iterrows():
+                predictions_data.append((row['directory'], row))
+            
+            # Load and display domain analysis (using all selected models for comprehensive analysis)
+            with st.spinner("Loading domain data..."):
+                domain_df, subdomain_df = load_domain_data(selected_models, selected_datasets, performance_df)
+            
+            # Display domain analysis for all selected datasets, including token length histograms
+            # But filter the display to only show plot_models in visualizations
+            display_domain_analysis(domain_df, subdomain_df, selected_datasets, predictions_data, plot_models)
+    
+    with main_tab2:
+        # Display Beaker import interface in main area
+        beaker_imported = beaker_import_main_component(st.session_state.input_dir)
+        if beaker_imported:
+            st.session_state.force_reload = True
+            st.success("🎉 New experiments imported! Switch to the 'Model Performance Analysis' tab to see the results.")
+            if st.button("🔄 Reload Data"):
+                st.rerun()
 
 if __name__ == "__main__":
     main() 

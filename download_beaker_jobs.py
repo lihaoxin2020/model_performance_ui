@@ -17,8 +17,8 @@ from utils.beaker_integration import download_experiment_results, check_beaker_a
 def read_experiment_ids(file_path: str) -> List[str]:
     """Read experiment IDs from a text file."""
     with open(file_path, 'r') as f:
-        # Strip whitespace and filter out empty lines
-        return [line.strip() for line in f if line.strip()]
+        # Strip whitespace, filter empty lines, and extract experiment ID after last colon if present
+        return [line.strip().split(':')[-1] for line in f if line.strip()]
 
 def download_single_experiment(experiment_id: str, output_dir: str) -> Tuple[bool, str, str]:
     """Download a single Beaker experiment."""

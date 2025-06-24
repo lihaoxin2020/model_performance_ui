@@ -11,6 +11,8 @@ from collections import defaultdict
 from datasets import load_dataset
 from transformers import AutoTokenizer
 from .task_handlers import BaseTaskHandler
+from utils.data_processing import get_cache_key, save_to_cache, load_from_cache
+import streamlit as st
 
 # Define datasets and their high-level categorization
 DATASET_INFO = {
@@ -124,8 +126,18 @@ def get_dataset_domains(dataset_name, predictions=None, directory=None):
     # Get domain information using the handler
     return handler.get_domains(predictions=predictions, directory=directory)
 
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_model_data(input_dir="outputs"):
-    """Load all model data from the input directory"""
+    """Load all model data from the input directory with caching"""
+    
+    # Create cache key based on input directory and file modification times
+    cache_key = get_cache_key(f"model_data_{input_dir}", [], [])
+    
+    # Try to load from cache first
+    cached_data = load_from_cache(cache_key, "model_data", max_age_hours=1)
+    if cached_data is not None:
+        return cached_data["performance_df"], cached_data["all_models"], cached_data["model_datasets"]
+    
     # Find all model directories
     directories = glob.glob(os.path.join(input_dir, "lmeval-*-on-*"))
     
@@ -173,12 +185,31 @@ def load_model_data(input_dir="outputs"):
     
     # Convert to dataframe
     if performance_data:
-        return pd.DataFrame(performance_data), all_models, model_datasets
+        performance_df = pd.DataFrame(performance_data)
+        
+        # Cache the results
+        cache_data = {
+            "performance_df": performance_df,
+            "all_models": all_models,
+            "model_datasets": dict(model_datasets)
+        }
+        save_to_cache(cache_key, cache_data, "model_data")
+        
+        return performance_df, all_models, model_datasets
     
     return pd.DataFrame(), [], {}
 
 def load_domain_data(selected_models, selected_datasets, performance_df):
-    """Load domain data for selected models and datasets"""
+    """Load domain data for selected models and datasets with caching"""
+    
+    # Create cache key based on selected models and datasets
+    cache_key = get_cache_key("domain_data", selected_models, selected_datasets)
+    
+    # Try to load from cache first
+    cached_data = load_from_cache(cache_key, "domain_data", max_age_hours=2)
+    if cached_data is not None:
+        return cached_data["domain_df"], cached_data["subdomain_df"]
+    
     domain_data = defaultdict(list)
     subdomain_data = defaultdict(list)
     
@@ -194,8 +225,8 @@ def load_domain_data(selected_models, selected_datasets, performance_df):
         dataset = row['dataset']
         directory = row['directory']
         
-        # Load predictions
-        predictions = load_predictions(directory)
+        # Load predictions with caching
+        predictions = load_predictions_cached(directory, model, dataset)
         if not predictions:
             continue
         
@@ -241,7 +272,34 @@ def load_domain_data(selected_models, selected_datasets, performance_df):
         for items in subdomain_data.values() for item in items
     ])
     
+    # Cache the results
+    cache_data = {
+        "domain_df": domain_df,
+        "subdomain_df": subdomain_df
+    }
+    save_to_cache(cache_key, cache_data, "domain_data")
+    
     return domain_df, subdomain_df
+
+def load_predictions_cached(directory, model, dataset):
+    """Load predictions with caching support"""
+    
+    # Create cache key for this specific predictions file
+    cache_key = get_cache_key(f"predictions_{directory}", [model], [dataset])
+    
+    # Try to load from cache first
+    cached_predictions = load_from_cache(cache_key, "predictions", max_age_hours=12)
+    if cached_predictions is not None:
+        return cached_predictions
+    
+    # Load predictions normally
+    predictions = load_predictions(directory)
+    
+    # Cache the predictions if they exist
+    if predictions:
+        save_to_cache(cache_key, predictions, "predictions")
+    
+    return predictions
 
 def process_domain_performance(predictions, domains, model, dataset, domain_data, handler):
     """Process performance for each domain"""

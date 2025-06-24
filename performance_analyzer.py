@@ -9,19 +9,36 @@ from typing import Dict, List, Tuple, Optional
 from pathlib import Path
 
 class ModelPerformanceAnalyzer:
-    def __init__(self, predictions_dir: str, dataset_name: str = "ArpanSarkar/ReasoningIntensiveStrict"):
+    def __init__(self, predictions_dir: str, dataset_name: str = None, is_knowledge: bool = False, target_tasks: List[str] = None):
         """
         Initialize the analyzer with the directory containing prediction files.
         
         Args:
             predictions_dir (str): Path to directory containing model prediction directories
-            dataset_name (str): Name of the dataset to load from Hugging Face (default: ArpanSarkar/ReasoningIntensiveStrict)
+            dataset_name (str): Name of the dataset to load from Hugging Face. If None, no filtering will be applied.
+            target_tasks (List[str]): List of specific task names to analyze. If None, all tasks will be analyzed.
         """
         self.predictions_dir = Path(predictions_dir)
         self.dataset_name = dataset_name
+        self.is_knowledge = is_knowledge
+        self.target_tasks = set(target_tasks) if target_tasks else None
+        
+        if self.target_tasks:
+            print(f"Targeting specific tasks: {', '.join(sorted(self.target_tasks))}")
+        
+        if dataset_name is None:
+            print("No dataset specified - all predictions will be processed without filtering")
+            self.reference_dataset = None
+            self.math_reference_dataset = None
+            self.task_doc_mapping = {}
+            self.math_mapping = {}
+            return
+            
         print(f"Loading the dataset: {dataset_name}...")
         self.reference_dataset = load_dataset(dataset_name)
-        self.math_reference_dataset = load_dataset("ArpanSarkar/merged_bench_annotated")
+        # self.math_reference_dataset = load_dataset("ArpanSarkar/merged_bench_annotated")
+        # self.math_reference_dataset = load_dataset("ArpanSarkar/merged_bench_annotated_nonmath")
+        self.math_reference_dataset = load_dataset("ArpanSarkar/merged_bench_no_numbers")
         print(f"Dataset loaded with {len(self.reference_dataset['train'])} instances")
         self.task_doc_mapping = self._create_task_doc_mapping()
         self.math_mapping = self._create_math_mapping()
@@ -67,6 +84,11 @@ class ModelPerformanceAnalyzer:
             if any(x in item['taskname'] for x in ['LitQA2', 'DbQA', 'SuppQA']):
                 continue
             task_name = item['taskname']
+            if self.is_knowledge:
+                if "gpqa" == task_name.lower():
+                    task_name = "gpqa_knowledge"
+                elif "mmlu_pro" in task_name.lower():
+                    task_name += "_knowledge"
             doc_id = str(item['doc_id'])
             mapping[(task_name, doc_id)] = True
         return mapping
@@ -81,14 +103,20 @@ class ModelPerformanceAnalyzer:
         """
         mapping = {}
         has_requires_math_field = 'requires_math' in self.math_reference_dataset['train'].features
-        
+        has_math_numbers_field = 'has_math_numbers' in self.math_reference_dataset['train'].features
         for item in self.math_reference_dataset['train']:
             task_name = item['taskname']
             doc_id = item['doc_id']
             
-            if has_requires_math_field:
+            if self.is_knowledge:
+                if "gpqa" == task_name.lower():
+                    task_name = "gpqa_knowledge"
+                elif "mmlu_pro" in task_name.lower():
+                    task_name += "_knowledge"
+            
+            if has_requires_math_field or has_math_numbers_field:
                 # Use the actual field if available
-                requires_math = item.get('requires_math', "NO") == "YES"
+                requires_math = item.get('requires_math', "NO") == "YES" or item.get('has_math_numbers', "NO") == "YES"
             else:
                 raise ValueError(f"requires_math field not found in dataset {self.dataset_name}")
             mapping[(task_name, str(doc_id))] = requires_math
@@ -121,6 +149,7 @@ class ModelPerformanceAnalyzer:
     def _filter_matching_instances(self, predictions_df: pd.DataFrame, task_name: str) -> pd.DataFrame:
         """
         Filter predictions to only include instances that match the reference dataset.
+        If no reference dataset is loaded, returns all predictions.
         
         Args:
             predictions_df (pd.DataFrame): DataFrame containing predictions
@@ -129,6 +158,27 @@ class ModelPerformanceAnalyzer:
         Returns:
             pd.DataFrame: Filtered DataFrame
         """
+        # If no reference dataset is loaded, return all predictions
+        if self.reference_dataset is None:
+            # Adjust column names if needed
+            if 'taskname' in predictions_df.columns and 'task' not in predictions_df.columns:
+                predictions_df['task'] = predictions_df['taskname']
+            elif 'task_name' in predictions_df.columns and 'task' not in predictions_df.columns:
+                predictions_df['task'] = predictions_df['task_name']
+            
+            # If no task column, add it using the extracted task name
+            if 'task' not in predictions_df.columns:
+                predictions_df['task'] = task_name
+            
+            # Filter by target tasks if specified
+            if self.target_tasks:
+                def task_matches_target(task_name):
+                    return any(target_task in task_name for target_task in self.target_tasks)
+                matching_mask = predictions_df['task'].apply(task_matches_target)
+                return predictions_df[matching_mask]
+            
+            return predictions_df
+        
         # Adjust column names if needed
         if 'taskname' in predictions_df.columns and 'task' not in predictions_df.columns:
             predictions_df['task'] = predictions_df['taskname']
@@ -145,6 +195,10 @@ class ModelPerformanceAnalyzer:
             row_task = row.get('task', task_name)
             doc_id = row.get('doc_id', '')
             
+            # First check if this task is in our target tasks (if specified)
+            if self.target_tasks and not any(target_task in row_task for target_task in self.target_tasks):
+                return False
+            
             # Check if this (taskname, doc_id) combination exists in reference dataset
             return self.task_doc_mapping.get((row_task, str(doc_id)), False)
             
@@ -154,6 +208,7 @@ class ModelPerformanceAnalyzer:
     def _filter_matching_instances_math_only(self, predictions_df: pd.DataFrame, task_name: str) -> pd.DataFrame:
         """
         Filter predictions for math-only mode - use math_reference_dataset and exclude sciriff/sciknow tasks.
+        If no math reference dataset is loaded, returns all predictions.
         
         Args:
             predictions_df (pd.DataFrame): DataFrame containing predictions
@@ -162,6 +217,27 @@ class ModelPerformanceAnalyzer:
         Returns:
             pd.DataFrame: Filtered DataFrame
         """
+        # If no math reference dataset is loaded, return all predictions
+        if self.math_reference_dataset is None:
+            # Adjust column names if needed
+            if 'taskname' in predictions_df.columns and 'task' not in predictions_df.columns:
+                predictions_df['task'] = predictions_df['taskname']
+            elif 'task_name' in predictions_df.columns and 'task' not in predictions_df.columns:
+                predictions_df['task'] = predictions_df['task_name']
+            
+            # If no task column, add it using the extracted task name
+            if 'task' not in predictions_df.columns:
+                predictions_df['task'] = task_name
+            
+            # Filter by target tasks if specified
+            if self.target_tasks:
+                def task_matches_target(task_name):
+                    return any(target_task in task_name for target_task in self.target_tasks)
+                matching_mask = predictions_df['task'].apply(task_matches_target)
+                return predictions_df[matching_mask]
+            
+            return predictions_df
+        
         # Adjust column names if needed
         if 'taskname' in predictions_df.columns and 'task' not in predictions_df.columns:
             predictions_df['task'] = predictions_df['taskname']
@@ -177,6 +253,10 @@ class ModelPerformanceAnalyzer:
             # Get task name from row, preferring existing task field
             row_task = row.get('task', task_name)
             doc_id = str(row.get('doc_id', ''))
+            
+            # First check if this task is in our target tasks (if specified)
+            if self.target_tasks and not any(target_task in row_task for target_task in self.target_tasks):
+                return False
             
             # Filter out sciriff and sciknow tasks
             if 'sciriff' in row_task.lower() or 'sciknow' in row_task.lower():
@@ -274,6 +354,7 @@ class ModelPerformanceAnalyzer:
     def _analyze_math_performance(self, task_df: pd.DataFrame, accuracy_series: pd.Series) -> Dict:
         """
         Analyze performance specifically for math vs non-math questions.
+        If no math mapping is available, treats all instances as non-math.
         
         Args:
             task_df (pd.DataFrame): DataFrame containing predictions for a specific task
@@ -292,6 +373,23 @@ class ModelPerformanceAnalyzer:
             'non_math_accuracy': 0.0,
             'math_distribution': 0.0
         }
+        
+        # If no math mapping is available, treat all instances as non-math
+        if not self.math_mapping:
+            non_math_correct = accuracy_series.sum() if len(accuracy_series) > 0 else 0
+            non_math_total = len(task_df)
+            
+            math_stats.update({
+                'math_instances': 0,
+                'non_math_instances': non_math_total,
+                'correct_math': 0,
+                'correct_non_math': non_math_correct,
+                'math_accuracy': 0.0,
+                'non_math_accuracy': non_math_correct / non_math_total if non_math_total > 0 else 0.0,
+                'math_distribution': 0.0
+            })
+            
+            return math_stats
         
         # Initialize counters
         math_correct = 0
@@ -469,6 +567,7 @@ class ModelPerformanceAnalyzer:
         # Aggregate math statistics
         all_math_rows = []
         model_aggregates = {}
+        benchmark_aggregates = {}
         
         for model_name, benchmarks in results.items():
             model_aggregates[model_name] = {
@@ -480,6 +579,16 @@ class ModelPerformanceAnalyzer:
             }
             
             for benchmark_name, tasks in benchmarks.items():
+                # Initialize benchmark aggregate for this model/benchmark combination
+                benchmark_key = (model_name, benchmark_name)
+                benchmark_aggregates[benchmark_key] = {
+                    'total_instances': 0,
+                    'math_instances': 0,
+                    'non_math_instances': 0,
+                    'correct_math': 0,
+                    'correct_non_math': 0
+                }
+                
                 for task, metrics in tasks.items():
                     if 'math_stats' in metrics:
                         math_stats = metrics['math_stats']
@@ -505,6 +614,30 @@ class ModelPerformanceAnalyzer:
                         model_aggregates[model_name]['non_math_instances'] += math_stats['non_math_instances']
                         model_aggregates[model_name]['correct_math'] += math_stats['correct_math']
                         model_aggregates[model_name]['correct_non_math'] += math_stats['correct_non_math']
+                        
+                        # Add to benchmark aggregates
+                        benchmark_aggregates[benchmark_key]['total_instances'] += math_stats['total_instances']
+                        benchmark_aggregates[benchmark_key]['math_instances'] += math_stats['math_instances']
+                        benchmark_aggregates[benchmark_key]['non_math_instances'] += math_stats['non_math_instances']
+                        benchmark_aggregates[benchmark_key]['correct_math'] += math_stats['correct_math']
+                        benchmark_aggregates[benchmark_key]['correct_non_math'] += math_stats['correct_non_math']
+                
+                # Add benchmark aggregate row
+                benchmark_agg = benchmark_aggregates[benchmark_key]
+                if benchmark_agg['total_instances'] > 0:
+                    all_math_rows.append({
+                        'model': model_name,
+                        'benchmark': benchmark_name,
+                        'task': 'BENCHMARK_AGGREGATE',
+                        'total_instances': benchmark_agg['total_instances'],
+                        'math_instances': benchmark_agg['math_instances'],
+                        'non_math_instances': benchmark_agg['non_math_instances'],
+                        'correct_math': benchmark_agg['correct_math'],
+                        'correct_non_math': benchmark_agg['correct_non_math'],
+                        'math_accuracy': benchmark_agg['correct_math'] / benchmark_agg['math_instances'] if benchmark_agg['math_instances'] > 0 else 0.0,
+                        'non_math_accuracy': benchmark_agg['correct_non_math'] / benchmark_agg['non_math_instances'] if benchmark_agg['non_math_instances'] > 0 else 0.0,
+                        'math_distribution': benchmark_agg['math_instances'] / benchmark_agg['total_instances'] if benchmark_agg['total_instances'] > 0 else 0.0
+                    })
         
         # Add model aggregate rows
         for model_name, agg in model_aggregates.items():
@@ -547,8 +680,21 @@ class ModelPerformanceAnalyzer:
                     print(f"  Non-math accuracy: {row['non_math_accuracy']:.1%} ({row['correct_non_math']}/{row['non_math_instances']})")
                     print()
             
+            # Benchmark-level statistics
+            benchmark_rows = math_df[math_df['task'] == 'BENCHMARK_AGGREGATE']
+            if not benchmark_rows.empty:
+                print("Math Performance by Model and Benchmark:")
+                for _, row in benchmark_rows.iterrows():
+                    print(f"{row['model']} - {row['benchmark']}:")
+                    print(f"  Total instances: {row['total_instances']}")
+                    print(f"  Math instances: {row['math_instances']} ({row['math_distribution']:.1%})")
+                    print(f"  Non-math instances: {row['non_math_instances']} ({(1-row['math_distribution']):.1%})")
+                    print(f"  Math accuracy: {row['math_accuracy']:.1%} ({row['correct_math']}/{row['math_instances']})")
+                    print(f"  Non-math accuracy: {row['non_math_accuracy']:.1%} ({row['correct_non_math']}/{row['non_math_instances']})")
+                    print()
+            
             # Task-level breakdown for tasks with both math and non-math questions
-            task_rows = math_df[~math_df['task'].isin(['MODEL_AGGREGATE'])]
+            task_rows = math_df[~math_df['task'].isin(['MODEL_AGGREGATE', 'BENCHMARK_AGGREGATE'])]
             mixed_tasks = task_rows[(task_rows['math_instances'] > 0) & (task_rows['non_math_instances'] > 0)]
             if not mixed_tasks.empty:
                 print("Tasks with both math and non-math questions:")
@@ -669,21 +815,25 @@ def main():
     parser = argparse.ArgumentParser(description='Analyze model performance across benchmarks')
     parser.add_argument('predictions_dir', help='Directory containing model prediction directories')
     parser.add_argument('--output', help='Output file path (defaults to [model_name]-[dataset_name]-results.tsv)')
-    parser.add_argument('--dataset', default="ArpanSarkar/ReasoningIntensiveLoose", 
-                        help='HuggingFace dataset to use for matching (default: ArpanSarkar/ReasoningIntensiveLoose)')
+    parser.add_argument('--dataset', default="ArpanSarkar/ReasoningIntensiveLoose_with_SuperGPQA", 
+                        help='HuggingFace dataset to use for matching (default: ArpanSarkar/ReasoningIntensiveLoose_with_SuperGPQA)')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('--list-dataset-tasks', action='store_true', 
                         help='List all tasks in the specified dataset and exit')
+    parser.add_argument('--target-tasks', nargs='+', 
+                        help='Specific task names to analyze (e.g., --target-tasks gpqa mmlu_pro). If not specified, all tasks will be analyzed.')
     parser.add_argument('--math-analysis', action='store_true', default=True,
                         help='Generate math performance analysis (enabled by default)')
     parser.add_argument('--no-math-analysis', action='store_true',
                         help='Disable math performance analysis')
     parser.add_argument('--math-only', action='store_true',
                         help='Generate only math analysis report (skip regular performance report)')
+    parser.add_argument('--is-knowledge', action='store_true', default=False,
+                        help='Whether the dataset is knowledge-based')
     args = parser.parse_args()
     
     # First initialize to load the dataset
-    analyzer = ModelPerformanceAnalyzer(args.predictions_dir, dataset_name=args.dataset)
+    analyzer = ModelPerformanceAnalyzer(args.predictions_dir, dataset_name=args.dataset, is_knowledge=args.is_knowledge, target_tasks=args.target_tasks)
     
     # If requested, list all tasks in the dataset and exit
     if args.list_dataset_tasks:
