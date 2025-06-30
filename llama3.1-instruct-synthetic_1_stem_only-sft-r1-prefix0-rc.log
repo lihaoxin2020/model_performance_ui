@@ -1,0 +1,10 @@
+llama3.1-instruct-synthetic_1_stem_only-sft-r1-prefix0-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0BDBH46YNBC016FG9NWWT8
+llama3.1-instruct-synthetic_1_stem_only-sft-r1-prefix0-mmlu_pro:rc_knowledge::scillm-111:01JZ0BDF632K2WSXZSWVDJB613
+llama3.1-instruct-synthetic_1_stem_only-sft-r1-prefix1-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0BDJPA72JPYWWNQY9YHKJ8
+llama3.1-instruct-synthetic_1_stem_only-sft-r1-prefix1-mmlu_pro:rc_knowledge::scillm-111:01JZ0BDP328TSZ9XEPVVF689YZ
+llama3.1-instruct-synthetic_1_stem_only-sft-r1-prefix2-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0BDSGT2A4H5WQ5DWA127TJ
+llama3.1-instruct-synthetic_1_stem_only-sft-r1-prefix2-mmlu_pro:rc_knowledge::scillm-111:01JZ0BDX2JG05GMA6FVA8KXAXA
+llama3.1-instruct-synthetic_1_stem_only-sft-r1-prefix3-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0BE0C744FF11W2CAANQ90R
+llama3.1-instruct-synthetic_1_stem_only-sft-r1-prefix3-mmlu_pro:rc_knowledge::scillm-111:01JZ0BE41606EBPG13WD0H8R6P
+llama3.1-instruct-synthetic_1_stem_only-sft-r1-prefix4-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0BE7XRAGV7T2CBJH6TGVDD
+llama3.1-instruct-synthetic_1_stem_only-sft-r1-prefix4-mmlu_pro:rc_knowledge::scillm-111:01JZ0BEBZ68BXPTPY4QR7P3CQP

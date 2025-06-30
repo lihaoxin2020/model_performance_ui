@@ -1,0 +1,10 @@
+llama3.1-instruct-synthetic_1-sft-r1-prefix0-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0B89JWT9K5PZ8S06Q0NF2A
+llama3.1-instruct-synthetic_1-sft-r1-prefix0-mmlu_pro:rc_knowledge::scillm-111:01JZ0B8DZ92ZM8D7VKRYCAFV2A
+llama3.1-instruct-synthetic_1-sft-r1-prefix1-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0B8HVF37F6E3G91M4C86FF
+llama3.1-instruct-synthetic_1-sft-r1-prefix1-mmlu_pro:rc_knowledge::scillm-111:01JZ0B8NXEEBFSHY1PAFWHB7RM
+llama3.1-instruct-synthetic_1-sft-r1-prefix2-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0B8SHZ1E50WY7GXD5DPGK9
+llama3.1-instruct-synthetic_1-sft-r1-prefix2-mmlu_pro:rc_knowledge::scillm-111:01JZ0B8XTKV48H4GW1P8JG4EW5
+llama3.1-instruct-synthetic_1-sft-r1-prefix3-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0B91CNR766T1FGJD4SD92S
+llama3.1-instruct-synthetic_1-sft-r1-prefix3-mmlu_pro:rc_knowledge::scillm-111:01JZ0B956C6YBR72N5SPTBZ9JP
+llama3.1-instruct-synthetic_1-sft-r1-prefix4-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0B9933QZRMGAGVYDVS328M
+llama3.1-instruct-synthetic_1-sft-r1-prefix4-mmlu_pro:rc_knowledge::scillm-111:01JZ0B9CT1E89764RAYTR5693V

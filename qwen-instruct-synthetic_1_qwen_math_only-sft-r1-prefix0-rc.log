@@ -1,0 +1,10 @@
+qwen-instruct-synthetic_1_qwen_math_only-sft-r1-prefix0-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0B9H55VMBPP0W37XG4ZZ04
+qwen-instruct-synthetic_1_qwen_math_only-sft-r1-prefix0-mmlu_pro:rc_knowledge::scillm-111:01JZ0B9N5QG72B59D400EC4997
+qwen-instruct-synthetic_1_qwen_math_only-sft-r1-prefix1-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0B9S5TS8GC7PJSS6K9Y6M4
+qwen-instruct-synthetic_1_qwen_math_only-sft-r1-prefix1-mmlu_pro:rc_knowledge::scillm-111:01JZ0B9XJZ5596J9AG39TDVWKR
+qwen-instruct-synthetic_1_qwen_math_only-sft-r1-prefix2-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0BA20F7JQTZC8P1B5EAH63
+qwen-instruct-synthetic_1_qwen_math_only-sft-r1-prefix2-mmlu_pro:rc_knowledge::scillm-111:01JZ0BA60ZGB1698CH59B3AQQ1
+qwen-instruct-synthetic_1_qwen_math_only-sft-r1-prefix3-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0BAA51BV02BMFF3R6Q5ECJ
+qwen-instruct-synthetic_1_qwen_math_only-sft-r1-prefix3-mmlu_pro:rc_knowledge::scillm-111:01JZ0BAE0MV70S5N65SC533Y72
+qwen-instruct-synthetic_1_qwen_math_only-sft-r1-prefix4-gpqa_knowledge_rc:0shot_cot::scillm-111:01JZ0BAJB8JAEN2ST04JGHDQSB
+qwen-instruct-synthetic_1_qwen_math_only-sft-r1-prefix4-mmlu_pro:rc_knowledge::scillm-111:01JZ0BAPJSJ79C8DHXFFKGX535
