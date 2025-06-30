@@ -1,0 +1,10 @@
+qwen-instruct-synthetic_1_stem_only-sft-r1-gpqa_knowledge:0shot_cot::scillm-111:01JYDTV0G7XQ34MTZ4FVZSECJQ
+qwen-instruct-synthetic_1_stem_only-sft-r1-mmlu_pro:cot_knowledge::scillm-111:01JYDTV6PMKSCP6ZEDTGCWQBPA
+qwen-instruct-synthetic_1_stem_only-sft-r1-gpqa_knowledge:0shot_cot::scillm-222:01JYDTVARW2PH82ME0PGSZN0NB
+qwen-instruct-synthetic_1_stem_only-sft-r1-mmlu_pro:cot_knowledge::scillm-222:01JYDTVGD33WP9CPTP9583ENXZ
+qwen-instruct-synthetic_1_stem_only-sft-r1-gpqa_knowledge:0shot_cot::scillm-333:01JYDTVPQP5SNHDCCJTZS7PEJG
+qwen-instruct-synthetic_1_stem_only-sft-r1-mmlu_pro:cot_knowledge::scillm-333:01JYDTVWNHXJV0XFKVQZZTPXND
+qwen-instruct-synthetic_1_stem_only-sft-r1-gpqa_knowledge:0shot_cot::scillm-444:01JYDTW1PD868JHMVGEB7DWDWW
+qwen-instruct-synthetic_1_stem_only-sft-r1-mmlu_pro:cot_knowledge::scillm-444:01JYDTW8XN8EAS0QBV1Y9S0084
+qwen-instruct-synthetic_1_stem_only-sft-r1-gpqa_knowledge:0shot_cot::scillm-555:01JYDTWFDRVSRRW12QPGG5JKDS
+qwen-instruct-synthetic_1_stem_only-sft-r1-mmlu_pro:cot_knowledge::scillm-555:01JYDTWPFYA80XVK1G5QDZCEF8

@@ -1,0 +1,12 @@
+model	benchmark	task	accuracy	num_instances
+qwen-instruct-synthetic_1_qwen_math_only-sft	gpqa_knowledge	gpqa_knowledge	0.17073170731707318	41
+qwen-instruct-synthetic_1_qwen_math_only-sft	gpqa_knowledge	BENCHMARK_AVERAGE	0.17073170731707318	41
+qwen-instruct-synthetic_1_qwen_math_only-sft	mmlu_pro-cot_knowledge-scillm	mmlu_pro_health:cot_knowledge	0.2	5
+qwen-instruct-synthetic_1_qwen_math_only-sft	mmlu_pro-cot_knowledge-scillm	mmlu_pro_physics:cot_knowledge	0.6	5
+qwen-instruct-synthetic_1_qwen_math_only-sft	mmlu_pro-cot_knowledge-scillm	mmlu_pro_engineering:cot_knowledge	0.21428571428571427	14
+qwen-instruct-synthetic_1_qwen_math_only-sft	mmlu_pro-cot_knowledge-scillm	mmlu_pro_math:cot_knowledge	0.0	3
+qwen-instruct-synthetic_1_qwen_math_only-sft	mmlu_pro-cot_knowledge-scillm	mmlu_pro_biology:cot_knowledge	0.6666666666666666	6
+qwen-instruct-synthetic_1_qwen_math_only-sft	mmlu_pro-cot_knowledge-scillm	mmlu_pro_chemistry:cot_knowledge	0.3333333333333333	3
+qwen-instruct-synthetic_1_qwen_math_only-sft	mmlu_pro-cot_knowledge-scillm	mmlu_pro_computer science:cot_knowledge	0.0	6
+qwen-instruct-synthetic_1_qwen_math_only-sft	mmlu_pro-cot_knowledge-scillm	BENCHMARK_AVERAGE	0.2857142857142857	42
+qwen-instruct-synthetic_1_qwen_math_only-sft	ALL_BENCHMARKS	MODEL_AVERAGE	0.2289156626506024	83

@@ -1,0 +1,12 @@
+model	benchmark	task	accuracy	num_instances
+llama3.1-instruct-synthetic_1_math_only-sft-temp0.6	mmlu_pro-cot_knowledge-scillm	mmlu_pro_health:cot_knowledge	0.4	5
+llama3.1-instruct-synthetic_1_math_only-sft-temp0.6	mmlu_pro-cot_knowledge-scillm	mmlu_pro_physics:cot_knowledge	1.0	5
+llama3.1-instruct-synthetic_1_math_only-sft-temp0.6	mmlu_pro-cot_knowledge-scillm	mmlu_pro_engineering:cot_knowledge	0.2857142857142857	14
+llama3.1-instruct-synthetic_1_math_only-sft-temp0.6	mmlu_pro-cot_knowledge-scillm	mmlu_pro_math:cot_knowledge	0.3333333333333333	3
+llama3.1-instruct-synthetic_1_math_only-sft-temp0.6	mmlu_pro-cot_knowledge-scillm	mmlu_pro_biology:cot_knowledge	0.5	6
+llama3.1-instruct-synthetic_1_math_only-sft-temp0.6	mmlu_pro-cot_knowledge-scillm	mmlu_pro_chemistry:cot_knowledge	0.3333333333333333	3
+llama3.1-instruct-synthetic_1_math_only-sft-temp0.6	mmlu_pro-cot_knowledge-scillm	mmlu_pro_computer science:cot_knowledge	0.3333333333333333	6
+llama3.1-instruct-synthetic_1_math_only-sft-temp0.6	mmlu_pro-cot_knowledge-scillm	BENCHMARK_AVERAGE	0.42857142857142855	42
+llama3.1-instruct-synthetic_1_math_only-sft-temp0.6	gpqa_knowledge	gpqa_knowledge	0.2682926829268293	41
+llama3.1-instruct-synthetic_1_math_only-sft-temp0.6	gpqa_knowledge	BENCHMARK_AVERAGE	0.2682926829268293	41
+llama3.1-instruct-synthetic_1_math_only-sft-temp0.6	ALL_BENCHMARKS	MODEL_AVERAGE	0.3493975903614458	83

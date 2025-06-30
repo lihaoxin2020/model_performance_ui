@@ -1,0 +1,12 @@
+llama3.1-instruct-synthetic_1_math_only-sft-llama3.1-instruct-synthetic_1_math_only-gpqa_knowledge:0shot_cot::scillm:01JY387RP98C5RHSA25TYRB5PQ
+llama3.1-instruct-synthetic_1_math_only-sft-llama3.1-instruct-synthetic_1_math_only-mmlu_pro:cot_knowledge::scillm:01JY38864X96PRNECD5XPG5DFW
+llama3.1-instruct-synthetic_1_math_only-sft-llama3.1-instruct-synthetic_1_math_only-gpqa_knowledge:0shot_cot::scillm-111:01JYDXJPQ5V0EHKHK99W070HNX
+llama3.1-instruct-synthetic_1_math_only-sft-llama3.1-instruct-synthetic_1_math_only-mmlu_pro:cot_knowledge::scillm-111:01JYDXJXCYB7N3GCRC3V3SDZ5B
+llama3.1-instruct-synthetic_1_math_only-sft-llama3.1-instruct-synthetic_1_math_only-gpqa_knowledge:0shot_cot::scillm-222:01JYDXK2KBXYK48NW6FN94GDDX
+llama3.1-instruct-synthetic_1_math_only-sft-llama3.1-instruct-synthetic_1_math_only-mmlu_pro:cot_knowledge::scillm-222:01JYDXK73FQE2T6WGXRQW7F7DB
+llama3.1-instruct-synthetic_1_math_only-sft-llama3.1-instruct-synthetic_1_math_only-gpqa_knowledge:0shot_cot::scillm-333:01JYDXKASWMNKB822N4EAHSK80
+llama3.1-instruct-synthetic_1_math_only-sft-llama3.1-instruct-synthetic_1_math_only-mmlu_pro:cot_knowledge::scillm-333:01JYDXKETBE8SV5T0FPK83S16E
+llama3.1-instruct-synthetic_1_math_only-sft-llama3.1-instruct-synthetic_1_math_only-gpqa_knowledge:0shot_cot::scillm-444:01JYDXKK09WB163T182HG692S4
+llama3.1-instruct-synthetic_1_math_only-sft-llama3.1-instruct-synthetic_1_math_only-mmlu_pro:cot_knowledge::scillm-444:01JYDXKQ6QWKYHG5CZAJV68TZH
+llama3.1-instruct-synthetic_1_math_only-sft-llama3.1-instruct-synthetic_1_math_only-gpqa_knowledge:0shot_cot::scillm-555:01JYDXKV63G0DESZHXYGVFR9BV
+llama3.1-instruct-synthetic_1_math_only-sft-llama3.1-instruct-synthetic_1_math_only-mmlu_pro:cot_knowledge::scillm-555:01JYDXKZRHBS038MKP9R25DH0J

@@ -1,0 +1,11 @@
+qwen3-8b-base-synthetic-sft-merged-no-thinking-gpqa:0shot_cot::scillm:01JYFJWG96BTDW4G2E4QC03GZV
+qwen3-8b-base-synthetic-sft-merged-no-thinking-lab_bench:0shot_cot::scillm:01JYFJWKHDNBD5D65CPDBX1RRG
+qwen3-8b-base-synthetic-sft-merged-no-thinking-scibench:0shot_cot::scillm:01JYFJWQDYDMVR0RRZYM124KQP
+qwen3-8b-base-synthetic-sft-merged-no-thinking-sciriff::scillm:01JYFJWTHX19QNDGEN0PEYM6CG
+qwen3-8b-base-synthetic-sft-merged-no-thinking-olympiadbench::scillm:01JYFJWXHBQZSQE5NH765R9NNF
+qwen3-8b-base-synthetic-sft-merged-no-thinking-mmlu_pro:0shot_cot::scillm:01JYFJX1FZCYGHY3RC513W6GGE
+qwen3-8b-base-synthetic-sft-merged-no-thinking-sciknoweval::scillm:01JYFJX5Q02QJZZJ10CECKHCKH
+qwen3-8b-base-synthetic-sft-merged-no-thinking-scieval::scillm:01JYFJX92E2CJ931YAYH319GWR
+qwen3-8b-base-synthetic-sft-merged-no-thinking-ugphysics::scillm:01JYFJXDBQTSV1RMTAVGCH3M6P
+qwen3-8b-base-synthetic-sft-merged-no-thinking-supergpqa_Science:cot::scillm:01JYFJXHEY0XW6ZRXN04MCAEQF
+qwen3-8b-base-synthetic-sft-merged-no-thinking-supergpqa_Engineering:cot::scillm:01JYFJXMZ6C9E5F0ZCH8KBZXCG

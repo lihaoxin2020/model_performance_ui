@@ -1,0 +1,15 @@
+qwen-insturct-synthetic_1-sft-poem-gpqa:0shot_cot::scillm-111:01JYXEGPCN5ERTWCE9BWPY2WSE
+qwen-insturct-synthetic_1-sft-poem-mmlu_pro:0shot_cot::scillm-111:01JYXEGWQFABFPCK1GZ3BB1Z86
+qwen-insturct-synthetic_1-sft-poem-lab_bench:0shot_cot_knowledge::scillm-111:01JYXEH30CPCH4614S0Y4KPDJQ
+qwen-insturct-synthetic_1-sft-poem-gpqa:0shot_cot::scillm-222:01JYXEM851BZ1E9EGZYQ4CXQ93
+qwen-insturct-synthetic_1-sft-poem-mmlu_pro:0shot_cot::scillm-222:01JYXEMENYZCMRCZ8J1E379XRC
+qwen-insturct-synthetic_1-sft-poem-lab_bench:0shot_cot_knowledge::scillm-222:01JYXEMN48933781HHBH6BV6M3
+qwen-insturct-synthetic_1-sft-poem-gpqa:0shot_cot::scillm-333:01JYXEQWWGYB92KG9HFSCNWAXK
+qwen-insturct-synthetic_1-sft-poem-mmlu_pro:0shot_cot::scillm-333:01JYXER0ZC9DJK1743E5KT45F7
+qwen-insturct-synthetic_1-sft-poem-lab_bench:0shot_cot_knowledge::scillm-333:01JYXER69BVGMEJ88XZSP031TK
+qwen-insturct-synthetic_1-sft-poem-gpqa:0shot_cot::scillm-444:01JYXEV1CQRCBB9CGYQZ23WD87
+qwen-insturct-synthetic_1-sft-poem-mmlu_pro:0shot_cot::scillm-444:01JYXEV80NAWV1SF4WS4G9EZY0
+qwen-insturct-synthetic_1-sft-poem-lab_bench:0shot_cot_knowledge::scillm-444:01JYXEVCQWMZ559RWQZW3EXZRS
+qwen-insturct-synthetic_1-sft-poem-gpqa:0shot_cot::scillm-555:01JYXEYFCWHZ1WCGEEEA961GXX
+qwen-insturct-synthetic_1-sft-poem-mmlu_pro:0shot_cot::scillm-555:01JYXEYP3647V0W8RM6NGDQTNH
+qwen-insturct-synthetic_1-sft-poem-lab_bench:0shot_cot_knowledge::scillm-555:01JYXEYWRPG8V8NHNZW7WKQTCS

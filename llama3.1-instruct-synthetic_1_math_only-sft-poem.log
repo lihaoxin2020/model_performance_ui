@@ -1,0 +1,17 @@
+llama3.1-instruct-synthetic_1_math_only-sft-poem-gpqa:0shot_cot::scillm-111:01JYXEJF0ZP75QV7R1GAZV6TW4
+llama3.1-instruct-synthetic_1_math_only-sft-poem-mmlu_pro:0shot_cot::scillm-111:01JYXEJN9SQPNF70NJEPXNQZ42
+llama3.1-instruct-synthetic_1_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-111:01JYXEJVRA9P4TDGMC2V32VX7S
+llama3.1-instruct-synthetic_1_math_only-sft-poem-gpqa:0shot_cot::scillm-222:01JYXEP1NAQ7AKBG8AAPRFTX7S
+llama3.1-instruct-synthetic_1_math_only-sft-poem-mmlu_pro:0shot_cot::scillm-222:01JYXEP80ZWN3K21SNKW7RJN5G
+llama3.1-instruct-synthetic_1_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-222:01JYXEPEKGPT6E6DWC1XHFSED8
+llama3.1-instruct-synthetic_1_math_only-sft-poem-gpqa:0shot_cot::scillm-333:01JYXESF2FXDRG3E6F37RJXQCH
+llama3.1-instruct-synthetic_1_math_only-sft-poem-mmlu_pro:0shot_cot::scillm-333:01JYXESJMJTCY1XG43X6CWBQ3D
+llama3.1-instruct-synthetic_1_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-333:01JYXESNT174S649TZ62Z129RX
+llama3.1-instruct-synthetic_1_math_only-sft-poem-gpqa:0shot_cot::scillm-444:01JYXEWN055VZZQZ2FNJR5PTMW
+llama3.1-instruct-synthetic_1_math_only-sft-poem-mmlu_pro:0shot_cot::scillm-444:01JYXEWVCGA3BZ4K98D7H2A5JP
+llama3.1-instruct-synthetic_1_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-444:01JYXEX35EPR1N91MH8QEZK0JM
+llama3.1-instruct-synthetic_1_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-111:01JYXG9JK8JJSBV4JJ8JFP8AN3
+llama3.1-instruct-synthetic_1_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-222:01JYXGADZP232F3DS2SDD0V2JD
+llama3.1-instruct-synthetic_1_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-333:01JYXGBM6DY5S5939YGMKSNMPY
+llama3.1-instruct-synthetic_1_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-444:01JYXGCT46H5425DXKS91APA4K
+llama3.1-instruct-synthetic_1_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-555:01JYXGDXV6RB41XM0R7W8JRWJW

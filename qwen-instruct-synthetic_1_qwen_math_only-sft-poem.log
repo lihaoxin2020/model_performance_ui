@@ -1,0 +1,17 @@
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-gpqa:0shot_cot::scillm-111:01JYXEHWGA505TF15KDGW0D7W2
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-mmlu_pro:0shot_cot::scillm-111:01JYXEJ2KS37STXRXKEM90Z4F5
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-111:01JYXEJ8S5ZTKE8FJ2D01959WX
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-gpqa:0shot_cot::scillm-222:01JYXENEDP3HF2AB17TDA8ECYN
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-mmlu_pro:0shot_cot::scillm-222:01JYXENMV4HPM0RZQEBBK6GC1C
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-222:01JYXENVAEX7AKBKGGQ1QR37YZ
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-gpqa:0shot_cot::scillm-333:01JYXES02S62HZGHTP0T11Q6KP
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-mmlu_pro:0shot_cot::scillm-333:01JYXES6JW5HJNRX7J72SE09PZ
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-333:01JYXESBB4SWN9C4DYEYS7EZMZ
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-gpqa:0shot_cot::scillm-444:01JYXEW0RMN6096SM71TYZ1C3C
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-mmlu_pro:0shot_cot::scillm-444:01JYXEW76V1D3HK51EJ25DGQ8S
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-444:01JYXEWE01A55SR0VHGPHP46XV
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-111:01JYXG95WSWNSZDYHV2NKF7J8T
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-222:01JYXGA5JJH58KFXPP3BYG4VRE
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-333:01JYXGB78T9QG02BJ54B3KRC92
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-444:01JYXGCDPFGX8RPP2XZK7EAYG5
+qwen-instruct-synthetic_1_qwen_math_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-555:01JYXGDHBKAA6C0DJ95ZT0T69X

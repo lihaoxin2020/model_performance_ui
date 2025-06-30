@@ -27,6 +27,9 @@ Example:
     python task_performance_viewer.py --comparison-dir lmeval_results/ --comparison-mode
     python task_performance_viewer.py --comparison-dir models/ --benchmark mmlu --comparison-mode
     python task_performance_viewer.py --comparison-dir models/ --comparison-mode --show-individual-tasks
+    
+    # Scireasbench-pro filtering
+    python task_performance_viewer.py --comparison-dir models/ --comparison-mode --filter-dataset scireasbench-pro
 """
 
 import argparse
@@ -43,12 +46,18 @@ from tabulate import tabulate
 class TaskPerformanceViewer:
     """Viewer for task-level performance metrics from lmeval results."""
     
-    def __init__(self, model_dir: str = None):
+    def __init__(self, model_dir: str = None, filter_dataset: str = None, is_knowledge: bool = False, target_tasks: List[str] = None,
+                 default_input_cost_per_million: float = 1.0, default_output_cost_per_million: float = 3.0):
         """
-        Initialize the viewer with a model directory.
+        Initialize the viewer with a model directory and optional dataset filtering.
         
         Args:
             model_dir (str, optional): Path to the model directory containing lmeval results
+            filter_dataset (str, optional): Name of the dataset to use for filtering (e.g., 'scireasbench-pro')
+            is_knowledge (bool): Whether the dataset is knowledge-based
+            target_tasks (List[str], optional): List of specific task names to analyze
+            default_input_cost_per_million (float): Default cost per million input tokens for unknown models
+            default_output_cost_per_million (float): Default cost per million output tokens for unknown models
         """
         if model_dir:
             self.model_dir = Path(model_dir)
@@ -59,6 +68,118 @@ class TaskPerformanceViewer:
             self.model_dir = None
             self.model_name = None
         
+        # Dataset filtering setup
+        self.filter_dataset = filter_dataset
+        self.is_knowledge = is_knowledge
+        self.target_tasks = set(target_tasks) if target_tasks else None
+        self.reference_dataset = None
+        self.task_doc_mapping = {}
+        
+        # Cost calculation settings
+        self.default_input_cost_per_million = default_input_cost_per_million
+        self.default_output_cost_per_million = default_output_cost_per_million
+        
+        # Load reference dataset if filtering is requested
+        if filter_dataset:
+            self._load_reference_dataset()
+    
+    def _load_reference_dataset(self):
+        """Load the reference dataset for filtering purposes."""
+        try:
+            from datasets import load_dataset
+            
+            # Map filter dataset names to actual HuggingFace dataset names
+            dataset_mapping = {
+                'scireasbench-pro': 'ArpanSarkar/ReasoningIntensiveLoose_with_SuperGPQA',
+                # Add more mappings as needed
+            }
+            
+            dataset_name = dataset_mapping.get(self.filter_dataset, self.filter_dataset)
+            
+            print(f"Loading reference dataset: {dataset_name}...")
+            self.reference_dataset = load_dataset(dataset_name)
+            print(f"Dataset loaded with {len(self.reference_dataset['train'])} instances")
+            
+            self.task_doc_mapping = self._create_task_doc_mapping()
+            print(f"Found {len(self.task_doc_mapping)} unique (taskname, doc_id) pairs in the reference dataset")
+            
+            # Group by task for display purposes
+            tasks_summary = {}
+            for (task_name, doc_id), exists in self.task_doc_mapping.items():
+                if exists:
+                    if task_name in tasks_summary:
+                        tasks_summary[task_name] += 1
+                    else:
+                        tasks_summary[task_name] = 1
+            
+            print(f"Grouped into {len(tasks_summary)} unique tasks for filtering")
+            for task, count in list(tasks_summary.items())[:5]:
+                print(f"Sample task: {task} with {count} document IDs")
+                
+        except ImportError:
+            print("Warning: datasets library not available. Dataset filtering will be disabled.")
+            self.reference_dataset = None
+            self.task_doc_mapping = {}
+        except Exception as e:
+            print(f"Warning: Could not load reference dataset {self.filter_dataset}: {e}")
+            self.reference_dataset = None
+            self.task_doc_mapping = {}
+    
+    def _create_task_doc_mapping(self) -> Dict[Tuple[str, str], bool]:
+        """
+        Create a mapping of (taskname, doc_id) to existence for quick lookup.
+        Reused from performance_analyzer.py
+        """
+        mapping = {}
+        if not self.reference_dataset:
+            return mapping
+            
+        for item in self.reference_dataset['train']:
+            # Skip items with LitQA2, DbQA, or SuppQA in taskname
+            if any(x in item['taskname'] for x in ['LitQA2', 'DbQA', 'SuppQA']):
+                continue
+            task_name = item['taskname']
+            if self.is_knowledge:
+                if "gpqa" == task_name.lower():
+                    task_name = "gpqa_knowledge"
+                elif "mmlu_pro" in task_name.lower():
+                    task_name += "_knowledge"
+            doc_id = str(item['doc_id'])
+            mapping[(task_name, doc_id)] = True
+        return mapping
+    
+    def _should_include_metric(self, metric_data: Dict) -> bool:
+        """
+        Determine if a metric should be included based on dataset filtering.
+        
+        Args:
+            metric_data (Dict): Metric data containing task_name and doc_id info
+            
+        Returns:
+            bool: True if the metric should be included
+        """
+        # If no filtering is enabled, include all metrics
+        if not self.filter_dataset or not self.task_doc_mapping:
+            return True
+        
+        # Extract task name from metric data
+        task_name = metric_data.get('task_name', '')
+        
+        # Apply target tasks filter if specified
+        if self.target_tasks:
+            if not any(target_task in task_name for target_task in self.target_tasks):
+                return False
+        
+        # For aggregate metrics, check if the corresponding task has any instances in our mapping
+        if metric_data.get('is_aggregate', False):
+            # Check if any instances of this task are in our mapping
+            return any(task_name == key[0] for key in self.task_doc_mapping.keys())
+        
+        # For individual task metrics, we do basic task name matching
+        # Note: This is a simplified approach since we don't have access to individual doc_ids 
+        # in the metrics files. For more precise filtering, the metrics would need to include doc_id info.
+        return any(task_name == key[0] for key in self.task_doc_mapping.keys())
+    
     def _extract_model_name(self) -> str:
         """Extract model name from the directory path."""
         # If the directory name follows the pattern lmeval/model_name, extract model_name
@@ -114,7 +235,8 @@ class TaskPerformanceViewer:
                     if line:
                         try:
                             metric_data = json.loads(line)
-                            metrics.append(metric_data)
+                            if self._should_include_metric(metric_data):
+                                metrics.append(metric_data)
                         except json.JSONDecodeError as e:
                             print(f"Warning: Failed to parse line {line_num} in {metrics_path}: {e}")
                             continue
@@ -162,6 +284,9 @@ class TaskPerformanceViewer:
                 'answer_format_correct': extra_metrics.get('answer_format_correct_macro', None)
             })
         
+        # Extract token information for cost analysis
+        self._extract_token_metrics(result, extra_metrics, metrics)
+        
         # Extract special sciriff metrics for custom aggregation
         sciriff_metrics = {}
         if 'sciriff' in task_name.lower():
@@ -184,6 +309,181 @@ class TaskPerformanceViewer:
             result['time_per_instance'] = processing_time / num_instances
         
         return result
+    
+    def _extract_token_metrics(self, result: Dict, extra_metrics: Dict, metrics: Dict):
+        """
+        Extract token-related metrics and calculate costs.
+        For reasoning models, reasoning tokens are added to output tokens.
+        
+        Args:
+            result (Dict): Result dictionary to update
+            extra_metrics (Dict): Extra metrics from the data
+            metrics (Dict): Main metrics dictionary
+        """
+        # Extract token counts - try different possible field names
+        input_tokens = (extra_metrics.get('input_tokens_macro') or 
+                       extra_metrics.get('input_tokens') or
+                       metrics.get('input_tokens_macro') or
+                       metrics.get('input_tokens'))
+        
+        output_tokens = (extra_metrics.get('output_tokens_macro') or 
+                        extra_metrics.get('num_tokens_macro') or
+                        extra_metrics.get('num_tokens') or
+                        metrics.get('output_tokens_macro') or
+                        metrics.get('num_tokens_macro') or
+                        metrics.get('num_tokens'))
+        
+        reasoning_tokens = (extra_metrics.get('reasoning_tokens_macro') or 
+                           extra_metrics.get('reasoning_tokens') or
+                           metrics.get('reasoning_tokens_macro') or
+                           metrics.get('reasoning_tokens'))
+        
+        total_tokens = (extra_metrics.get('total_tokens_macro') or 
+                       extra_metrics.get('total_tokens') or
+                       metrics.get('total_tokens_macro') or
+                       metrics.get('total_tokens'))
+        
+        # If we have avg_tokens but not individual token counts, use it as fallback
+        if total_tokens is None and result.get('avg_tokens'):
+            total_tokens = result['avg_tokens']
+        
+        # If we don't have separate input/output tokens but have total tokens, estimate split
+        if input_tokens is None and output_tokens is None and total_tokens is not None:
+            # Rough estimation: assume 60% input, 40% output for cost calculation
+            input_tokens = total_tokens * 0.6
+            output_tokens = total_tokens * 0.4
+            effective_output_tokens = output_tokens
+        # If we have output_tokens but no input_tokens, estimate input as 60% of output
+        elif input_tokens is None and output_tokens is not None:
+            # Estimate input tokens as 0.1x output tokens
+            input_tokens = output_tokens * 0.1
+        
+        # Add reasoning tokens to output tokens (for reasoning models)
+        if output_tokens is not None and reasoning_tokens is not None and reasoning_tokens > 0:
+            effective_output_tokens = output_tokens + reasoning_tokens
+            result['reasoning_tokens'] = reasoning_tokens
+            result['output_tokens_with_reasoning'] = effective_output_tokens
+        else:
+            effective_output_tokens = output_tokens
+            result['reasoning_tokens'] = reasoning_tokens or 0
+        
+        # Store token counts
+        result['input_tokens'] = input_tokens
+        result['output_tokens'] = output_tokens
+        result['effective_output_tokens'] = effective_output_tokens
+        result['num_tokens'] = effective_output_tokens  # Store as num_tokens for consistency with display
+        result['total_tokens'] = total_tokens
+        
+        # Calculate costs based on standard pricing (if tokens are available)
+        if input_tokens is not None and effective_output_tokens is not None:
+            # Try to extract model name from task context for better pricing
+            model_name = getattr(self, 'model_name', None)
+            total_cost = self._calculate_token_cost(
+                input_tokens, 
+                effective_output_tokens, 
+                model_name,
+                self.default_input_cost_per_million,
+                self.default_output_cost_per_million
+            )
+            result['calculated_total_cost'] = total_cost
+            
+            # Calculate cost per instance
+            if result['num_instances'] > 0:
+                result['cost_per_instance'] = total_cost / result['num_instances']
+        
+        # Use existing total_price if available (takes precedence over calculated)
+        if result.get('total_price') is not None:
+            # If we have reported price, calculate cost per instance
+            if result['num_instances'] > 0:
+                result['reported_cost_per_instance'] = result['total_price'] / result['num_instances']
+    
+    def _calculate_token_cost(self, input_tokens: float, output_tokens: float, 
+                             model_name: str = None, 
+                             default_input_cost_per_million: float = 1.0,
+                             default_output_cost_per_million: float = 3.0) -> float:
+        """
+        Calculate cost based on input and output tokens using model-specific or default pricing.
+        
+        Args:
+            input_tokens (float): Number of input tokens
+            output_tokens (float): Number of output tokens (including reasoning tokens)
+            model_name (str, optional): Model name for model-specific pricing
+            default_input_cost_per_million (float): Default cost per million input tokens if model not found
+            default_output_cost_per_million (float): Default cost per million output tokens if model not found
+            
+        Returns:
+            float: Total cost in USD
+        """
+        # Standard pricing (per million tokens) - based on public pricing as of 2024
+        # Users should update these based on actual current pricing
+        pricing_map = {
+            # OpenAI models
+            'gpt-4o': {'input': 2.5, 'output': 10.0},
+            'gpt-4-turbo': {'input': 10.0, 'output': 30.0},
+            'gpt-4': {'input': 30.0, 'output': 60.0},
+            'gpt-4.1': {'input': 2.0, 'output': 8.0},
+            'o3-low': {'input': 2.0, 'output': 8.0},
+            'gpt-3.5-turbo': {'input': 0.5, 'output': 1.5},
+            
+            # Anthropic models
+            'claude-3-opus': {'input': 15.0, 'output': 75.0},
+            'claude-3-sonnet': {'input': 3.0, 'output': 15.0},
+            'claude-3-haiku': {'input': 0.25, 'output': 1.25},
+            'claude-3.5-sonnet': {'input': 3.0, 'output': 15.0},
+            
+            # DeepSeek models
+            'deepseek-v3': {'input': 0.14, 'output': 0.28},
+            'deepseek-v2.5': {'input': 0.14, 'output': 0.28},
+            'deepseek': {'input': 0.14, 'output': 0.28},
+            
+            # Alibaba Qwen models
+            'qwen2.5': {'input': 0.4, 'output': 1.2},
+            'qwen': {'input': 0.4, 'output': 1.2},
+            
+            # Google models
+            'gemini-pro': {'input': 0.5, 'output': 1.5},
+            'gemini-flash': {'input': 0.075, 'output': 0.3},
+            'gemini-2.5-pro-preview-05-06-low': {'input': 1.25, 'output': 10.0},
+            'gemini2.5-pro-high': {'input': 1.25, 'output': 10.0},
+            
+            # Meta models (estimated based on similar tiers)
+            'llama-3.1-405b': {'input': 2.0, 'output': 6.0},
+            'llama-3.1-70b': {'input': 0.4, 'output': 1.2},
+            'llama-3.1-8b': {'input': 0.15, 'output': 0.6},
+            'llama': {'input': 0.4, 'output': 1.2},  # Default for llama models
+            'claude-sonnet-4-low': {'input': 3.0, 'output': 15.0},
+            'claude-sonnet-4-high': {'input': 3.0, 'output': 15.0},
+        }
+        
+        # Default pricing for unknown models
+        default_pricing = {
+            'input': default_input_cost_per_million, 
+            'output': default_output_cost_per_million
+        }
+        
+        # Try to match model name to pricing
+        pricing = default_pricing
+        used_default = True
+        
+        if model_name:
+            model_lower = model_name.lower()
+            # Try exact matches first, then partial matches
+            for model_key, model_pricing in pricing_map.items():
+                if model_key in model_lower:
+                    pricing = model_pricing
+                    used_default = False
+                    break
+        
+        # Calculate cost (convert to millions of tokens)
+        input_cost = (input_tokens / 1_000_000) * pricing['input']
+        output_cost = (output_tokens / 1_000_000) * pricing['output']
+        total_cost = input_cost + output_cost
+        
+        # Store whether default pricing was used for transparency
+        if hasattr(self, '_last_cost_calculation_used_default'):
+            self._last_cost_calculation_used_default = used_default
+        
+        return total_cost
     
     def discover_benchmarks(self, benchmark_filter: Optional[str] = None) -> List[Tuple[str, Path]]:
         """
@@ -376,6 +676,7 @@ class TaskPerformanceViewer:
         if not metrics_entries:
             return {}
         
+
         # Use first entry as template
         template = metrics_entries[0].copy()
         
@@ -384,7 +685,10 @@ class TaskPerformanceViewer:
             'primary_score', 'exact_match', 'exact_match_simple', 
             'max_tokens_reached', 'avg_tokens', 'total_price', 
             'answer_format_correct', 'time_per_instance',
-            'f1_overlap', 'llm_score', 'f1_evidence_all', 'f1_label', 'f1_evidence_token'
+            'f1_overlap', 'llm_score', 'f1_evidence_all', 'f1_label', 'f1_evidence_token',
+            # Token and cost metrics
+            'input_tokens', 'output_tokens', 'reasoning_tokens', 'effective_output_tokens', 'num_tokens',
+            'total_tokens', 'calculated_total_cost', 'cost_per_instance', 'reported_cost_per_instance'
         ]
         
         # Collect values for each field
@@ -406,7 +710,8 @@ class TaskPerformanceViewer:
                     field_counts[field] += 1
         
         # Calculate averages and standard deviations
-        compute_std = len(metrics_entries) >= 5
+        compute_std = len(metrics_entries) >= 3
+        print(f"compute_std: {compute_std} with {len(metrics_entries)} entries")
         
         for field in numeric_fields:
             if field in field_values and field_counts[field] > 0:
@@ -418,6 +723,7 @@ class TaskPerformanceViewer:
                     try:
                         std_dev = statistics.stdev(values)
                         template[f'{field}_std'] = std_dev
+
                     except statistics.StatisticsError:
                         template[f'{field}_std'] = None
                 else:
@@ -460,28 +766,28 @@ class TaskPerformanceViewer:
         for model_name, benchmarks in discovered_models.items():
             print(f"\nProcessing model: {model_name}")
             
-            # Temporarily set model directory to load metrics
-            original_model_dir = self.model_dir
-            original_model_name = self.model_name
-            
-            self.model_dir = Path(comparison_dir) / model_name
-            self.model_name = model_name
+            # Create a new viewer instance for this model with the same filtering settings
+            model_viewer = TaskPerformanceViewer(
+                str(Path(comparison_dir) / model_name),
+                filter_dataset=self.filter_dataset,
+                is_knowledge=self.is_knowledge,
+                target_tasks=list(self.target_tasks) if self.target_tasks else None,
+                default_input_cost_per_million=self.default_input_cost_per_million,
+                default_output_cost_per_million=self.default_output_cost_per_million
+            )
             
             try:
-                model_metrics = self.load_all_metrics(benchmark_filter)
+                model_metrics = model_viewer.load_all_metrics(benchmark_filter)
                 models_data[model_name] = model_metrics
             except Exception as e:
                 print(f"Error loading metrics for model {model_name}: {e}")
-            finally:
-                # Restore original values
-                self.model_dir = original_model_dir
-                self.model_name = original_model_name
         
         return models_data
     
     def create_comparison_table(self, models_data: Dict[str, Dict[str, List[Dict]]], 
                               metric_type: str = "primary_score",
-                              show_aggregates_only: bool = True) -> pd.DataFrame:
+                              show_aggregates_only: bool = True,
+                              comparison_dir: str = None) -> pd.DataFrame:
         """
         Create a comparison table with models as rows and tasks as columns.
         
@@ -489,6 +795,7 @@ class TaskPerformanceViewer:
             models_data (Dict): Multi-model metrics data from load_multi_model_metrics()
             metric_type (str): Which metric to compare ("primary_score", "exact_match")
             show_aggregates_only (bool): Whether to show only aggregate scores or individual tasks
+            comparison_dir (str): Path to comparison directory (for micro averaging)
             
         Returns:
             pd.DataFrame: Comparison table
@@ -535,7 +842,7 @@ class TaskPerformanceViewer:
                         if show_aggregates_only and metric.get('is_aggregate', False):
                             score = metric.get(metric_type)
                             break
-                        elif not show_aggregates_only and not metric.get('is_aggregate', False) and metric['task_name'] == task_name:
+                        elif not show_aggregates_only and not metric.get('is_aggregate', False) and str(metric.get('task_name', '')) == str(task_name):
                             score = metric.get(metric_type)
                             break
                 
@@ -550,10 +857,34 @@ class TaskPerformanceViewer:
         benchmark_order = sorted(all_benchmarks)
         ordered_columns = []
         for benchmark in benchmark_order:
-            benchmark_columns = [col for col in df.columns if col.startswith(benchmark)]
+            benchmark_columns = [str(col) for col in df.columns if str(col).startswith(benchmark)]
             ordered_columns.extend(sorted(benchmark_columns))
         
-        df = df[ordered_columns]
+        # Only reorder if we have valid columns
+        if ordered_columns:
+            df = df[ordered_columns]
+        
+        # Add micro-averaged score column for filtered datasets
+        if self.filter_dataset:
+            # Prepare model directories for micro averaging
+            model_dirs = {}
+            if comparison_dir:
+                # Comparison mode
+                for model_name in models_data.keys():
+                    model_dirs[model_name] = Path(comparison_dir) / model_name
+            elif hasattr(self, 'model_dir') and self.model_dir:
+                # Single model mode
+                for model_name in models_data.keys():
+                    model_dirs[model_name] = self.model_dir
+            
+            micro_averaged_scores = self._compute_micro_averaged_score(models_data, metric_type, model_dirs)
+            df[f'{self.filter_dataset.upper()}_MICRO_AVG'] = df.index.map(micro_averaged_scores)
+            
+            # Move the micro average column to the front for visibility
+            cols = df.columns.tolist()
+            micro_col = f'{self.filter_dataset.upper()}_MICRO_AVG'
+            cols = [micro_col] + [col for col in cols if col != micro_col]
+            df = df[cols]
         
         return df
     
@@ -561,7 +892,8 @@ class TaskPerformanceViewer:
                                metric_type: str = "primary_score",
                                format_type: str = "table",
                                show_aggregates_only: bool = True,
-                               precision: int = 4):
+                               precision: int = 4,
+                               comparison_dir: str = None):
         """
         Display a comparison table of models vs tasks.
         
@@ -571,8 +903,15 @@ class TaskPerformanceViewer:
             format_type (str): Output format
             show_aggregates_only (bool): Whether to show only aggregate scores
             precision (int): Number of decimal places to show
+            comparison_dir (str): Path to comparison directory (for micro averaging)
         """
-        df = self.create_comparison_table(models_data, metric_type, show_aggregates_only)
+        try:
+            df = self.create_comparison_table(models_data, metric_type, show_aggregates_only, comparison_dir)
+        except Exception as e:
+            print(f"Error in create_comparison_table: {e}")
+            import traceback
+            traceback.print_exc()
+            return
         
         if df.empty:
             print("No data available for comparison.")
@@ -584,31 +923,134 @@ class TaskPerformanceViewer:
             print("(Showing aggregate scores only)")
         else:
             print("(Showing individual task scores)")
+        
+        # Show filtering information if dataset filtering is enabled
+        if self.filter_dataset:
+            print(f"(Filtered using dataset: {self.filter_dataset})")
+            print(f"(Micro-averaged scores computed across all filtered instances)")
+            if self.target_tasks:
+                print(f"(Target tasks: {', '.join(sorted(self.target_tasks))})")
+        
         print(f"{'='*120}")
         
         # Format the DataFrame for display
-        df_display = df.copy()
-        for col in df_display.columns:
-            df_display[col] = df_display[col].apply(
-                lambda x: f"{x:.{precision}f}" if pd.notna(x) else "N/A"
-            )
+        try:
+            df_display = df.copy()
+            for col in df_display.columns:
+                try:
+                    def format_value(x):
+                        if isinstance(x, pd.Series):
+                            if len(x) == 1 and pd.notna(x.iloc[0]):
+                                return f"{x.iloc[0]:.{precision}f}"
+                            else:
+                                return "N/A"
+                        elif pd.notna(x):
+                            return f"{x:.{precision}f}"
+                        else:
+                            return "N/A"
+                    
+                    df_display[col] = df_display[col].apply(format_value)
+                except Exception as e:
+                    print(f"Error processing column {col}: {e}")
+                    print(f"Column dtype: {df_display[col].dtype}")
+                    print(f"Sample values: {df_display[col].head()}")
+                    return
+        except Exception as e:
+            print(f"Error creating df_display: {e}")
+            return
         
         if format_type == "table":
-            print(tabulate(df_display, headers=df_display.columns, tablefmt="grid", stralign="center"))
+            try:
+                print(tabulate(df_display, headers=df_display.columns, tablefmt="grid", stralign="center"))
+            except Exception as e:
+                print(f"Error in tabulate: {e}")
+                import traceback
+                traceback.print_exc()
+                print("DataFrame shape:", df_display.shape)
+                print("DataFrame columns:", list(df_display.columns))
+                print("DataFrame dtypes:", df_display.dtypes)
+                return
         else:
             print(df_display.to_string())
         
         # Calculate and display averages (excluding knowledge tasks)
         print(f"\n{'='*60}")
-        print("AVERAGES (excluding knowledge benchmarks)")
+        if self.filter_dataset:
+            print(f"AVERAGES (filtered by {self.filter_dataset}, excluding knowledge benchmarks)")
+        else:
+            print("AVERAGES (excluding knowledge benchmarks)")
         print(f"{'='*60}")
         
+        # Show micro-averaged scores first if filtering is enabled
+        if self.filter_dataset:
+            micro_col = f'{self.filter_dataset.upper()}_MICRO_AVG'
+            if micro_col in df.columns:
+                print(f"\n{self.filter_dataset.upper()} MICRO-AVERAGED SCORES:")
+                print("-" * 40)
+                
+                # Get micro-averaged scores and sort by score
+                micro_scores = [(model, df.loc[model, micro_col]) for model in df.index if pd.notna(df.loc[model, micro_col])]
+                micro_scores.sort(key=lambda x: x[1], reverse=True)
+                
+                for i, (model, score) in enumerate(micro_scores, 1):
+                    print(f"{i:2d}. {model:.<30} {score:.{precision}f}")
+                
+                print(f"\n{'='*60}")
+                print("MACRO AVERAGES ACROSS BENCHMARKS (for reference)")
+                print(f"{'='*60}")
+        
+        # Show cost summary if cost information is available
+        cost_cols = ['TOTAL_COST_EXCL_KNOWLEDGE', 'AVG_COST_PER_INSTANCE']
+        if any(col in df.columns for col in cost_cols):
+            print(f"\n{'='*60}")
+            print("COST ANALYSIS (excluding knowledge benchmarks)")
+            print(f"{'='*60}")
+            
+            if 'TOTAL_COST_EXCL_KNOWLEDGE' in df.columns:
+                print("\nTOTAL COSTS:")
+                print("-" * 20)
+                total_costs = [(model, df.loc[model, 'TOTAL_COST_EXCL_KNOWLEDGE']) 
+                              for model in df.index if pd.notna(df.loc[model, 'TOTAL_COST_EXCL_KNOWLEDGE'])]
+                total_costs.sort(key=lambda x: x[1])  # Sort by cost (ascending)
+                
+                for i, (model, cost) in enumerate(total_costs, 1):
+                    print(f"{i:2d}. {model:.<30} ${cost:.4f}")
+            
+            if 'AVG_COST_PER_INSTANCE' in df.columns:
+                print("\nAVERAGE COST PER INSTANCE:")
+                print("-" * 30)
+                avg_costs = [(model, df.loc[model, 'AVG_COST_PER_INSTANCE']) 
+                            for model in df.index if pd.notna(df.loc[model, 'AVG_COST_PER_INSTANCE'])]
+                avg_costs.sort(key=lambda x: x[1])  # Sort by cost (ascending)
+                
+                for i, (model, cost) in enumerate(avg_costs, 1):
+                    print(f"{i:2d}. {model:.<30} ${cost:.6f}")
+            
+            print(f"\n{'='*60}")
+            print("PERFORMANCE AVERAGES")
+            print(f"{'='*60}")
+        
         # Filter out knowledge columns and calculate averages
-        non_knowledge_cols = [col for col in df.columns if 'knowledge' not in col.lower()]
+        # Updated to handle sciknoweval-scillm and other knowledge-related columns
+        non_knowledge_cols = [col for col in df.columns if not self._is_knowledge_benchmark(col)]
+        
+        # Exclude micro average column from macro averaging
+        if self.filter_dataset:
+            micro_col = f'{self.filter_dataset.upper()}_MICRO_AVG'
+            non_knowledge_cols = [col for col in non_knowledge_cols if col != micro_col]
+        
         if non_knowledge_cols:
             avg_scores = {}
             for model in df.index:
-                model_scores = [df.loc[model, col] for col in non_knowledge_cols if pd.notna(df.loc[model, col])]
+                model_scores = []
+                for col in non_knowledge_cols:
+                    val = df.loc[model, col]
+                    # Handle case where val might be a Series
+                    if isinstance(val, pd.Series):
+                        if len(val) == 1 and pd.notna(val.iloc[0]):
+                            model_scores.append(val.iloc[0])
+                    elif pd.notna(val):
+                        model_scores.append(val)
                 if model_scores:
                     avg_scores[model] = sum(model_scores) / len(model_scores)
             
@@ -617,6 +1059,144 @@ class TaskPerformanceViewer:
             
             for i, (model, avg_score) in enumerate(sorted_models, 1):
                 print(f"{i:2d}. {model:.<30} {avg_score:.{precision}f}")
+    
+    def _is_knowledge_benchmark(self, benchmark_name: str) -> bool:
+        """
+        Determine if a benchmark is a knowledge-based benchmark that should be excluded from averages.
+        
+        Args:
+            benchmark_name (str): Name of the benchmark
+            
+        Returns:
+            bool: True if this is a knowledge benchmark
+        """
+        benchmark_lower = benchmark_name.lower()
+        
+        # Check for various knowledge benchmark patterns
+        knowledge_patterns = [
+            'knowledge',     # Direct "knowledge" keyword
+            # 'knoweval',      # sciknoweval-scillm pattern
+            # 'sciknow',       # Another pattern for sciknoweval
+            "maj_at_k"
+        ]
+        
+        return any(pattern in benchmark_lower for pattern in knowledge_patterns)
+    
+    def create_comparison_table_with_averages(self, models_data: Dict[str, Dict[str, List[Dict]]], 
+                                            metric_type: str = "primary_score",
+                                            show_aggregates_only: bool = True,
+                                            comparison_dir: str = None) -> pd.DataFrame:
+        """
+        Create a comparison table that includes calculated averages as additional columns.
+        This ensures exported data matches displayed averages.
+        
+        Args:
+            models_data (Dict): Multi-model metrics data from load_multi_model_metrics()
+            metric_type (str): Which metric to compare ("primary_score", "exact_match")
+            show_aggregates_only (bool): Whether to show only aggregate scores or individual tasks
+            comparison_dir (str): Path to comparison directory (for micro averaging)
+            
+        Returns:
+            pd.DataFrame: Comparison table with additional average columns
+        """
+        # Create base comparison table (which now includes micro averages if filtering is enabled)
+        df = self.create_comparison_table(models_data, metric_type, show_aggregates_only, comparison_dir)
+        
+        if df.empty:
+            return df
+        
+        # Calculate averages excluding knowledge benchmarks
+        non_knowledge_cols = [col for col in df.columns if not self._is_knowledge_benchmark(col)]
+        knowledge_cols = [col for col in df.columns if self._is_knowledge_benchmark(col)]
+        
+        # Exclude micro average column from macro averaging calculations
+        micro_col = None
+        if self.filter_dataset:
+            micro_col = f'{self.filter_dataset.upper()}_MICRO_AVG'
+            non_knowledge_cols = [col for col in non_knowledge_cols if col != micro_col]
+        
+        # Add average columns
+        avg_all_scores = []
+        avg_non_knowledge_scores = []
+        
+        for model in df.index:
+            # Average including all benchmarks (excluding micro average column)
+            all_scores = []
+            for col in df.columns:
+                if col != micro_col:
+                    val = df.loc[model, col]
+                    # Handle case where val might be a Series
+                    if isinstance(val, pd.Series):
+                        if len(val) == 1 and pd.notna(val.iloc[0]):
+                            all_scores.append(val.iloc[0])
+                    elif pd.notna(val):
+                        all_scores.append(val)
+            avg_all = sum(all_scores) / len(all_scores) if all_scores else None
+            avg_all_scores.append(avg_all)
+            
+            # Average excluding knowledge benchmarks
+            non_knowledge_scores = []
+            for col in non_knowledge_cols:
+                val = df.loc[model, col]
+                # Handle case where val might be a Series
+                if isinstance(val, pd.Series):
+                    if len(val) == 1 and pd.notna(val.iloc[0]):
+                        non_knowledge_scores.append(val.iloc[0])
+                elif pd.notna(val):
+                    non_knowledge_scores.append(val)
+            avg_non_knowledge = sum(non_knowledge_scores) / len(non_knowledge_scores) if non_knowledge_scores else None
+            avg_non_knowledge_scores.append(avg_non_knowledge)
+        
+        # Add the average columns to the DataFrame
+        df['AVERAGE_ALL_BENCHMARKS'] = avg_all_scores
+        df['AVERAGE_EXCL_KNOWLEDGE'] = avg_non_knowledge_scores
+        
+        # Calculate aggregate cost information
+        total_costs = []
+        avg_costs_per_instance = []
+        
+        for model in df.index:
+            model_total_cost = 0
+            model_instances = 0
+            model_cost_sum = 0
+            
+            # Look for cost information in the model data
+            model_data = models_data.get(model, {})
+            for benchmark_name, metrics_list in model_data.items():
+                if benchmark_name in non_knowledge_cols:  # Only include non-knowledge benchmarks
+                    aggregate = next((m for m in metrics_list if m.get('is_aggregate', False)), None)
+                    if aggregate:
+                        total_cost = aggregate.get('total_price') or aggregate.get('calculated_total_cost')
+                        cost_per_instance = (aggregate.get('reported_cost_per_instance') or 
+                                           aggregate.get('cost_per_instance'))
+                        instances = aggregate.get('num_instances', 0)
+                        
+                        if total_cost is not None:
+                            model_total_cost += total_cost
+                        if cost_per_instance is not None and instances > 0:
+                            model_cost_sum += cost_per_instance * instances
+                            model_instances += instances
+            
+            total_costs.append(model_total_cost if model_total_cost > 0 else None)
+            avg_costs_per_instance.append(model_cost_sum / model_instances if model_instances > 0 else None)
+        
+        df['TOTAL_COST_EXCL_KNOWLEDGE'] = total_costs
+        df['AVG_COST_PER_INSTANCE'] = avg_costs_per_instance
+        
+        # Add metadata columns to help users understand what was excluded
+        if knowledge_cols:
+            df['KNOWLEDGE_BENCHMARKS_EXCLUDED'] = ', '.join(knowledge_cols)
+        else:
+            df['KNOWLEDGE_BENCHMARKS_EXCLUDED'] = 'None'
+        
+        df['NON_KNOWLEDGE_BENCHMARK_COUNT'] = len(non_knowledge_cols)
+        df['TOTAL_BENCHMARK_COUNT'] = len(df.columns) - 6  # Subtract the 6 metadata columns we just added
+        
+        # Add note about micro averaging if filtering is enabled
+        if self.filter_dataset and micro_col:
+            df['MICRO_AVERAGE_NOTE'] = f'Micro-averaged score available in {micro_col} column'
+        
+        return df
     
     def display_summary(self, all_metrics: Dict[str, List[Dict]], format_type: str = "simple"):
         """
@@ -662,12 +1242,43 @@ class TaskPerformanceViewer:
                     else:
                         exact_match_str = f"{exact_match:.4f}"
                 
+                # Format cost information
+                cost_str = "N/A"
+                cost_per_instance_str = "N/A"
+                
+                # Prefer reported cost, fall back to calculated cost
+                total_cost = aggregate.get('total_price') or aggregate.get('calculated_total_cost')
+                cost_per_instance = (aggregate.get('reported_cost_per_instance') or 
+                                   aggregate.get('cost_per_instance'))
+                
+                if total_cost is not None:
+                    cost_str = f"${total_cost:.4f}"
+                if cost_per_instance is not None:
+                    cost_per_instance_str = f"${cost_per_instance:.4f}"
+                
+                # Format token information
+                token_info = ""
+                input_tokens = aggregate.get('input_tokens')
+                effective_output_tokens = aggregate.get('num_tokens')
+                reasoning_tokens = aggregate.get('reasoning_tokens', 0)
+                
+                if input_tokens and effective_output_tokens:
+                    if reasoning_tokens and reasoning_tokens > 0:
+                        token_info = f"In:{input_tokens:.0f}, Out:{effective_output_tokens:.0f} (inc. {reasoning_tokens:.0f} reasoning)"
+                    else:
+                        token_info = f"In:{input_tokens:.0f}, Out:{effective_output_tokens:.0f}"
+                elif aggregate.get('avg_tokens'):
+                    token_info = f"Avg:{aggregate['avg_tokens']:.0f}"
+
                 summary_data.append({
                     'Benchmark': benchmark_name,
                     'Primary Score': primary_score_str,
                     'Exact Match': exact_match_str,
                     'Tasks': len(metrics_list) - 1,  # Subtract 1 for aggregate
                     'Total Instances': num_instances,
+                    'Total Cost': cost_str,
+                    'Cost/Instance': cost_per_instance_str,
+                    'Tokens': token_info,
                     'Runs': aggregate.get('num_runs', 1)
                 })
                 
@@ -779,13 +1390,36 @@ class TaskPerformanceViewer:
                     'Instances': task['num_instances'],
                 }
                 
-                # Add optional metrics if available
-                if task.get('avg_tokens') is not None:
+                # Add cost information
+                total_cost = task.get('total_price') or task.get('calculated_total_cost')
+                cost_per_instance = (task.get('reported_cost_per_instance') or 
+                                   task.get('cost_per_instance'))
+                
+                if total_cost is not None:
+                    row['Total Cost'] = f"${total_cost:.4f}"
+                if cost_per_instance is not None:
+                    row['Cost/Instance'] = f"${cost_per_instance:.4f}"
+                
+                # Add token information
+                input_tokens = task.get('input_tokens')
+                effective_output_tokens = task.get('num_tokens')
+                reasoning_tokens = task.get('reasoning_tokens', 0)
+                
+                if input_tokens is not None:
+                    row['Input Tokens'] = f"{input_tokens:.0f}"
+                if effective_output_tokens is not None:
+                    if reasoning_tokens and reasoning_tokens > 0:
+                        row['Output Tokens'] = f"{effective_output_tokens:.0f} (+{reasoning_tokens:.0f} reasoning)"
+                    else:
+                        row['Output Tokens'] = f"{effective_output_tokens:.0f}"
+                elif task.get('avg_tokens') is not None:
                     avg_tokens_std = task.get('avg_tokens_std')
                     if avg_tokens_std is not None:
                         row['Avg Tokens'] = f"{task['avg_tokens']:.1f} ± {avg_tokens_std:.1f}"
                     else:
                         row['Avg Tokens'] = f"{task['avg_tokens']:.1f}"
+                
+                # Add time information if available
                 if task.get('time_per_instance') is not None:
                     time_std = task.get('time_per_instance_std')
                     if time_std is not None:
@@ -820,8 +1454,6 @@ class TaskPerformanceViewer:
                         print(f"  Primary Score: {task['primary_score']:.4f} ± {primary_score_std:.4f}")
                     else:
                         print(f"  Primary Score: {task['primary_score']:.4f}")
-                else:
-                    print("  Primary Score: N/A")
                 
                 # Exact match with std if available
                 if task['exact_match'] is not None:
@@ -838,12 +1470,64 @@ class TaskPerformanceViewer:
                     else:
                         print(f"  Exact Match (Simple): {task['exact_match_simple']:.4f}")
                 
-                if task.get('avg_tokens') is not None:
+                # Display token information
+                input_tokens = task.get('input_tokens')
+                output_tokens = task.get('output_tokens')
+                effective_output_tokens = task.get('num_tokens')
+                reasoning_tokens = task.get('reasoning_tokens', 0)
+                
+                if input_tokens is not None:
+                    print(f"  Input Tokens: {input_tokens:.0f}")
+                if output_tokens is not None:
+                    print(f"  Output Tokens: {output_tokens:.0f}")
+                if reasoning_tokens and reasoning_tokens > 0:
+                    print(f"  Reasoning Tokens: {reasoning_tokens:.0f}")
+                if effective_output_tokens is not None and effective_output_tokens != output_tokens:
+                    print(f"  Effective Output Tokens (incl. reasoning): {effective_output_tokens:.0f}")
+                elif task.get('avg_tokens') is not None:
                     avg_tokens_std = task.get('avg_tokens_std')
                     if avg_tokens_std is not None:
                         print(f"  Average Tokens: {task['avg_tokens']:.1f} ± {avg_tokens_std:.1f}")
                     else:
                         print(f"  Average Tokens: {task['avg_tokens']:.1f}")
+                
+                # Display cost information
+                total_cost = task.get('total_price') or task.get('calculated_total_cost')
+                cost_per_instance = (task.get('reported_cost_per_instance') or 
+                                   task.get('cost_per_instance'))
+                
+                if total_cost is not None:
+                    if task.get('total_price'):
+                        cost_source = "reported"
+                    else:
+                        # Check if we have model-specific pricing or used defaults
+                        model_name = getattr(self, 'model_name', '').lower() if hasattr(self, 'model_name') else ''
+                        known_models = ['gpt-4', 'claude-3', 'deepseek', 'qwen', 'gemini', 'llama']
+                        has_known_pricing = any(model in model_name for model in known_models)
+                        cost_source = "calculated" if has_known_pricing else f"calculated (default: ${self.default_input_cost_per_million:.2f}/${self.default_output_cost_per_million:.2f} per M tokens)"
+                    
+                    cost_std = task.get('total_price_std') or task.get('calculated_total_cost_std')
+                    if cost_std is not None:
+                        print(f"  Total Cost ({cost_source}): ${total_cost:.4f} ± ${cost_std:.4f}")
+                    else:
+                        print(f"  Total Cost ({cost_source}): ${total_cost:.4f}")
+                
+                if cost_per_instance is not None:
+                    if task.get('reported_cost_per_instance'):
+                        cost_source = "reported"
+                    else:
+                        # Check if we have model-specific pricing or used defaults
+                        model_name = getattr(self, 'model_name', '').lower() if hasattr(self, 'model_name') else ''
+                        known_models = ['gpt-4', 'claude-3', 'deepseek', 'qwen', 'gemini', 'llama']
+                        has_known_pricing = any(model in model_name for model in known_models)
+                        cost_source = "calculated" if has_known_pricing else "calculated (default pricing)"
+                    
+                    cost_per_instance_std = (task.get('reported_cost_per_instance_std') or 
+                                           task.get('cost_per_instance_std'))
+                    if cost_per_instance_std is not None:
+                        print(f"  Cost per Instance ({cost_source}): ${cost_per_instance:.4f} ± ${cost_per_instance_std:.4f}")
+                    else:
+                        print(f"  Cost per Instance ({cost_source}): ${cost_per_instance:.4f}")
                 
                 if task.get('max_tokens_reached') is not None:
                     max_tokens_std = task.get('max_tokens_reached_std')
@@ -865,13 +1549,6 @@ class TaskPerformanceViewer:
                         print(f"  Time per Instance: {task['time_per_instance']:.2f} ± {time_std:.2f}s")
                     else:
                         print(f"  Time per Instance: {task['time_per_instance']:.2f}s")
-                
-                if task.get('total_price') is not None:
-                    price_std = task.get('total_price_std')
-                    if price_std is not None:
-                        print(f"  Total Cost: ${task['total_price']:.4f} ± ${price_std:.4f}")
-                    else:
-                        print(f"  Total Cost: ${task['total_price']:.4f}")
                         
         else:  # simple format
             for task in all_tasks:
@@ -1034,8 +1711,8 @@ class TaskPerformanceViewer:
             
             # Collect benchmark-level aggregates for this model
             for benchmark_name, metrics_list in model_metrics.items():
-                # Skip knowledge benchmarks for average calculation
-                if "knowledge" in benchmark_name.lower():
+                # Skip knowledge benchmarks for average calculation using updated logic
+                if self._is_knowledge_benchmark(benchmark_name):
                     continue
                     
                 # Find aggregate metrics
@@ -1236,11 +1913,15 @@ class TaskPerformanceViewer:
     def _create_lab_bench_aggregate(self, lab_bench_data: List[Dict]) -> List[Dict]:
         """
         Create a custom lab_bench aggregate that only considers CloningScenarios, ProtocolQA, and SeqQA.
+        Now includes standard deviation calculation when there are multiple runs.
         
         Returns:
             List[Dict]: List containing the lab_bench aggregate and individual tasks
         """
-        # Find the individual task metrics (not aggregates)
+        # Find the original aggregate which has the CORRECT std dev across runs
+        original_aggregate = next((item for item in lab_bench_data if item.get('is_aggregate', False)), None)
+        
+        # Find the individual task metrics (not aggregates) - these are already averaged across runs
         tasks = [item for item in lab_bench_data if not item.get('is_aggregate', False)]
         
         # Filter tasks to only include CloningScenarios, ProtocolQA, and SeqQA
@@ -1250,10 +1931,10 @@ class TaskPerformanceViewer:
             print("Warning: No CloningScenarios, ProtocolQA, or SeqQA tasks found in lab_bench data.")
             return lab_bench_data
         
-        # Calculate aggregate metrics
-        total_instances = sum(task.get('num_instances', 0) for task in filtered_tasks)
-        total_time = 0
-        total_cost = 0
+        # Get the number of runs from any task (they should all have the same)
+        num_runs = filtered_tasks[0].get('num_runs', 1) if filtered_tasks else 1
+        
+        # Extract primary scores and exact matches from the already-averaged tasks
         primary_scores = []
         exact_matches = []
         
@@ -1262,31 +1943,329 @@ class TaskPerformanceViewer:
                 primary_scores.append(task['primary_score'])
             if task.get('exact_match') is not None:
                 exact_matches.append(task['exact_match'])
+        
+        # Calculate average across the three task types
+        avg_primary = sum(primary_scores) / len(primary_scores) if primary_scores else None
+        avg_exact_match = sum(exact_matches) / len(exact_matches) if exact_matches else None
+        
+        # Use the CORRECT std dev from the original aggregate (calculated across 5 runs)
+        # The original aggregate's std dev is calculated properly across runs, not task types
+        primary_score_std = original_aggregate.get('primary_score_std') if original_aggregate else None
+        exact_match_std = original_aggregate.get('exact_match_std') if original_aggregate else None
+        
+        # Calculate other aggregate metrics
+        total_instances = sum(task.get('num_instances', 0) for task in filtered_tasks)
+        total_time = 0
+        total_cost = 0
+        
+        for task in filtered_tasks:
             if task.get('time_per_instance') and task.get('num_instances'):
                 total_time += task['time_per_instance'] * task['num_instances']
             if task.get('total_price'):
                 total_cost += task['total_price']
         
-        # Calculate average primary score and exact match
-        avg_primary = sum(primary_scores) / len(primary_scores) if primary_scores else None
-        avg_exact_match = sum(exact_matches) / len(exact_matches) if exact_matches else None
-        
-        # Create aggregate entry
+        # Create aggregate entry with standard deviations
+        std_indicator = " (±std)" if primary_score_std is not None or exact_match_std is not None else ""
         aggregate = {
-            'task_name': 'lab_bench (CloningScenarios + ProtocolQA + SeqQA average)',
+            'task_name': f'lab_bench (CloningScenarios + ProtocolQA + SeqQA average) (avg of {num_runs} runs{std_indicator})',
             'task_core': 'lab_bench_aggregate',
             'num_instances': total_instances,
             'primary_score': avg_primary,
             'exact_match': avg_exact_match,
             'exact_match_simple': avg_exact_match,
+            'primary_score_std': primary_score_std,
+            'exact_match_std': exact_match_std,
             'is_aggregate': True,
             'benchmark': 'lab_bench',
             'benchmark_path': 'aggregated',
             'time_per_instance': total_time / total_instances if total_instances > 0 else None,
             'total_price': total_cost if total_cost > 0 else None,
+            'num_runs': num_runs,
         }
         
         return [aggregate] + tasks
+
+    def _display_filtering_info(self):
+        """Display information about the current filtering settings."""
+        if not self.filter_dataset:
+            return
+        
+        print(f"\n{'='*60}")
+        print(f"DATASET FILTERING ACTIVE")
+        print(f"{'='*60}")
+        print(f"Filter dataset: {self.filter_dataset}")
+        print(f"Aggregation method: Micro-averaging across all filtered instances")
+        
+        if self.task_doc_mapping:
+            # Group tasks by name for display
+            tasks_summary = {}
+            for (task_name, doc_id), exists in self.task_doc_mapping.items():
+                if exists:
+                    if task_name in tasks_summary:
+                        tasks_summary[task_name] += 1
+                    else:
+                        tasks_summary[task_name] = 1
+            
+            print(f"Tasks available for filtering ({len(tasks_summary)} unique tasks):")
+            for task, count in sorted(tasks_summary.items()):
+                print(f"  - {task}: {count} instances")
+        
+        if self.target_tasks:
+            print(f"Target tasks specified: {', '.join(sorted(self.target_tasks))}")
+        
+        print(f"Knowledge mode: {'Yes' if self.is_knowledge else 'No'}")
+        print()
+
+    def _compute_micro_averaged_score(self, models_data: Dict[str, Dict[str, List[Dict]]], 
+                                    metric_type: str = "primary_score",
+                                    model_dirs: Dict[str, Path] = None) -> Dict[str, float]:
+        """
+        Compute micro-averaged scores for filtered datasets by analyzing actual prediction files.
+        This loads the raw prediction files and filters individual instances, then computes
+        accuracy across all filtered instances.
+        
+        Args:
+            models_data (Dict): Multi-model metrics data
+            metric_type (str): Which metric to compute micro average for
+            model_dirs (Dict[str, Path]): Dictionary mapping model names to their directory paths
+            
+        Returns:
+            Dict[str, float]: Dictionary mapping model names to their micro-averaged scores
+        """
+        if not self.filter_dataset:
+            return {}
+            
+        micro_averaged_scores = {}
+        
+        # Need to go back to the original model directories to find prediction files
+        for model_name in models_data.keys():
+            total_correct = 0
+            total_instances = 0
+            
+            # Find the model directory
+            model_dir = None
+            if model_dirs and model_name in model_dirs:
+                # Comparison mode with provided model directories
+                model_dir = model_dirs[model_name]
+            elif hasattr(self, 'model_dir') and self.model_dir:
+                # Single model mode
+                model_dir = self.model_dir
+            else:
+                # Skip if we can't find the model directory
+                print(f"Warning: Could not find directory for model {model_name}")
+                continue
+                
+            # Find all prediction files in the model directory
+            prediction_files = self._find_prediction_files_in_model_dir(model_dir)
+            
+            print(f"Processing {len(prediction_files)} prediction files for model {model_name}")
+            
+            for pred_file in prediction_files:
+                try:
+                    # Extract task name from file path
+                    task_name = self._extract_task_from_file_path(pred_file)
+                    
+                    # Load and filter predictions
+                    predictions_df = self._load_predictions(pred_file)
+                    filtered_df = self._filter_matching_instances(predictions_df, task_name)
+                    
+                    if filtered_df.empty:
+                        continue
+                    
+                    # Calculate accuracy on filtered instances
+                    accuracy_series = self._calculate_accuracy_series(filtered_df)
+                    if accuracy_series is not None:
+                        total_correct += accuracy_series.sum()
+                        total_instances += len(accuracy_series)
+                        
+                except Exception as e:
+                    print(f"Warning: Error processing {pred_file} for micro averaging: {e}")
+                    continue
+            
+            # Calculate micro average
+            if total_instances > 0:
+                micro_averaged_scores[model_name] = total_correct / total_instances
+                print(f"Model {model_name}: {total_correct}/{total_instances} = {micro_averaged_scores[model_name]:.4f}")
+            else:
+                micro_averaged_scores[model_name] = None
+                print(f"Model {model_name}: No filtered instances found")
+        
+        return micro_averaged_scores
+    
+    def _find_prediction_files_in_model_dir(self, model_dir: Path) -> List[Path]:
+        """
+        Find all prediction files in a model directory, similar to performance_analyzer.
+        
+        Args:
+            model_dir (Path): Path to model directory
+            
+        Returns:
+            List[Path]: List of paths to prediction files
+        """
+        prediction_files = []
+        
+        # Look in all subdirectories for prediction files
+        for subdir in model_dir.glob('*'):
+            if not subdir.is_dir():
+                continue
+                
+            # Look for files with "predictions" in the name
+            for file_path in subdir.glob('**/*predictions*.json*'):
+                prediction_files.append(file_path)
+            
+            # If no prediction files found, look for any JSON/JSONL files
+            if not any(f.parent == subdir for f in prediction_files):
+                for file_path in subdir.glob('**/*.json*'):
+                    # Skip metrics files
+                    if 'metrics' not in file_path.name.lower():
+                        prediction_files.append(file_path)
+                        
+        return prediction_files
+    
+    def _load_predictions(self, file_path: Path) -> pd.DataFrame:
+        """
+        Load predictions from a JSON or JSONL file, similar to performance_analyzer.
+        
+        Args:
+            file_path (Path): Path to the prediction file
+            
+        Returns:
+            pd.DataFrame: DataFrame containing predictions
+        """
+        if str(file_path).endswith('.jsonl'):
+            # Handle JSONL files
+            data = []
+            with open(file_path, 'r') as f:
+                for line in f:
+                    if line.strip():
+                        data.append(json.loads(line))
+        else:
+            # Handle JSON files
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+                
+        return pd.DataFrame(data)
+    
+    def _extract_task_from_file_path(self, file_path: Path) -> str:
+        """
+        Extract task name from the prediction file path, similar to performance_analyzer.
+        
+        Args:
+            file_path (Path): Path to the prediction file
+            
+        Returns:
+            str: Extracted task name
+        """
+        # First look for task pattern in the filename
+        task_match = re.search(r'task-\d+-(.+)-predictions', file_path.stem)
+        if task_match:
+            return task_match.group(1)
+        
+        # Also check for task in the parent directory path
+        for parent in file_path.parts:
+            task_match = re.search(r'task-\d+-(.+)-predictions', parent)
+            if task_match:
+                return task_match.group(1)
+                
+        # If no match, try to extract benchmark name from directory
+        for parent in file_path.parts:
+            on_match = re.search(r'-on-(.+)-[a-f0-9]{10}', parent)
+            if on_match:
+                return on_match.group(1)
+        
+        # Default to the file stem if no pattern matches
+        return file_path.stem
+    
+    def _filter_matching_instances(self, predictions_df: pd.DataFrame, task_name: str) -> pd.DataFrame:
+        """
+        Filter predictions to only include instances that match the reference dataset,
+        similar to performance_analyzer.
+        
+        Args:
+            predictions_df (pd.DataFrame): DataFrame containing predictions
+            task_name (str): Task name extracted from the file path
+            
+        Returns:
+            pd.DataFrame: Filtered DataFrame
+        """
+        # If no reference dataset is loaded, return all predictions
+        if not self.reference_dataset or not self.task_doc_mapping:
+            return predictions_df
+        
+        # Adjust column names if needed
+        if 'taskname' in predictions_df.columns and 'task' not in predictions_df.columns:
+            predictions_df['task'] = predictions_df['taskname']
+        elif 'task_name' in predictions_df.columns and 'task' not in predictions_df.columns:
+            predictions_df['task'] = predictions_df['task_name']
+        
+        # If no task column, add it using the extracted task name
+        if 'task' not in predictions_df.columns:
+            predictions_df['task'] = task_name
+            
+        # Create a mask for matching instances
+        def is_match(row):
+            # Get task name from row, preferring existing task field
+            row_task = row.get('task', task_name)
+            doc_id = row.get('doc_id', '')
+            
+            # First check if this task is in our target tasks (if specified)
+            if self.target_tasks and not any(target_task in row_task for target_task in self.target_tasks):
+                return False
+            
+            # Check if this (taskname, doc_id) combination exists in reference dataset
+            return self.task_doc_mapping.get((row_task, str(doc_id)), False)
+            
+        matching_mask = predictions_df.apply(is_match, axis=1)
+        return predictions_df[matching_mask]
+    
+    def _calculate_accuracy_series(self, filtered_df: pd.DataFrame) -> Optional[pd.Series]:
+        """
+        Calculate accuracy series from filtered predictions, similar to performance_analyzer.
+        
+        Args:
+            filtered_df (pd.DataFrame): DataFrame containing filtered predictions
+            
+        Returns:
+            Optional[pd.Series]: Series indicating correctness for each instance
+        """
+        # Ensure we have necessary columns
+        if 'prediction' not in filtered_df.columns:
+            for col in ['pred', 'output', 'generated', 'prediction_text', 'completion']:
+                if col in filtered_df.columns:
+                    filtered_df['prediction'] = filtered_df[col]
+                    break
+        
+        if 'label' not in filtered_df.columns:
+            for col in ['target', 'ground_truth', 'answer', 'label_text', 'correct_answer']:
+                if col in filtered_df.columns:
+                    filtered_df['label'] = filtered_df[col]
+                    break
+        
+        # Calculate accuracy - using existing metrics if available
+        if 'exact_match_flex' in filtered_df.columns:
+            return filtered_df['exact_match_flex']
+        elif 'exact_match_simple' in filtered_df.columns:
+            return filtered_df['exact_match_simple']
+        elif 'correctness' in filtered_df.columns:
+            return filtered_df['correctness']
+        elif 'metrics' in filtered_df.columns:
+            # Look for metrics within a metrics field
+            def extract_metric(row):
+                if isinstance(row.get('metrics'), dict):
+                    for metric_name in ['exact_match_flex', 'exact_match_simple', 'correctness']:
+                        if metric_name in row['metrics']:
+                            return row['metrics'][metric_name]
+                return None
+            
+            metrics = filtered_df.apply(extract_metric, axis=1)
+            if not metrics.isna().all():
+                return metrics
+            elif 'prediction' in filtered_df.columns and 'label' in filtered_df.columns:
+                return (filtered_df['prediction'] == filtered_df['label']).astype(int)
+        elif 'prediction' in filtered_df.columns and 'label' in filtered_df.columns:
+            return (filtered_df['prediction'] == filtered_df['label']).astype(int)
+        
+        return None
 
 
 def main():
@@ -1303,6 +2282,9 @@ Examples:
   %(prog)s --comparison-dir models/ --benchmark mmlu --comparison-mode
   %(prog)s lmeval/Qwen3-32B --export-summary summary.tsv
   %(prog)s --comparison-dir models/ --comparison-mode --export-comparison-summary model_rankings.tsv
+  %(prog)s --comparison-dir models/ --comparison-mode --filter-dataset scireasbench-pro
+  %(prog)s lmeval/custom-model --default-input-cost 0.5 --default-output-cost 1.5
+  %(prog)s --comparison-dir models/ --comparison-mode --default-input-cost 2.0 --default-output-cost 6.0
         """
     )
     
@@ -1327,6 +2309,17 @@ Examples:
     parser.add_argument('--export-summary', help='Export summary table to TSV file')
     parser.add_argument('--export-comparison-summary', help='Export comparison summary (model averages) to TSV file')
     
+    # Dataset filtering arguments
+    parser.add_argument('--filter-dataset', help='Filter metrics using a reference dataset (e.g., "scireasbench-pro")')
+    parser.add_argument('--is-knowledge', action='store_true', help='Whether the filtered dataset is knowledge-based')
+    parser.add_argument('--target-tasks', nargs='+', help='Specific task names to analyze when filtering')
+    
+    # Cost calculation arguments
+    parser.add_argument('--default-input-cost', type=float, default=1.0,
+                        help='Default cost per million input tokens for models without specific pricing (default: 1.0)')
+    parser.add_argument('--default-output-cost', type=float, default=3.0,
+                        help='Default cost per million output tokens for models without specific pricing (default: 3.0)')
+    
     args = parser.parse_args()
     
     # Validate arguments
@@ -1337,7 +2330,17 @@ Examples:
         parser.error("model_dir is required unless using --comparison-mode with --comparison-dir")
     
     try:
-        viewer = TaskPerformanceViewer(args.model_dir)
+        viewer = TaskPerformanceViewer(
+            args.model_dir, 
+            filter_dataset=args.filter_dataset,
+            is_knowledge=args.is_knowledge,
+            target_tasks=args.target_tasks,
+            default_input_cost_per_million=args.default_input_cost,
+            default_output_cost_per_million=args.default_output_cost
+        )
+        
+        # Display filtering information if enabled
+        viewer._display_filtering_info()
         
         if args.comparison_mode:
             # Multi-model comparison mode
@@ -1348,22 +2351,37 @@ Examples:
                 return 1
             
             # Display comparison table
-            viewer.display_comparison_table(
-                models_data, 
-                metric_type=args.metric_type,
-                format_type=args.format, 
-                show_aggregates_only=not args.show_individual_tasks
-            )
+            try:
+                viewer.display_comparison_table(
+                    models_data, 
+                    metric_type=args.metric_type,
+                    format_type=args.format, 
+                    show_aggregates_only=not args.show_individual_tasks,
+                    comparison_dir=args.comparison_dir
+                )
+            except Exception as e:
+                print(f"Error in display_comparison_table: {e}")
+                import traceback
+                traceback.print_exc()
             
             # Export comparison if requested
             if args.export:
-                df = viewer.create_comparison_table(
-                    models_data, 
-                    metric_type=args.metric_type,
-                    show_aggregates_only=not args.show_individual_tasks
-                )
-                df.to_csv(args.export, sep='\t')
-                print(f"Exported comparison table to {args.export}")
+                try:
+                    # Use enhanced export that includes calculated averages for consistency
+                    df = viewer.create_comparison_table_with_averages(
+                        models_data, 
+                        metric_type=args.metric_type,
+                        show_aggregates_only=not args.show_individual_tasks,
+                        comparison_dir=args.comparison_dir
+                    )
+                    df.to_csv(args.export, sep='\t')
+                    print(f"Exported comparison table with averages to {args.export}")
+                    print("Note: AVERAGE_EXCL_KNOWLEDGE column matches displayed averages (excludes knowledge benchmarks)")
+                    print("      AVERAGE_ALL_BENCHMARKS column includes all benchmarks for reference")
+                except Exception as e:
+                    print(f"Error in export: {e}")
+                    import traceback
+                    traceback.print_exc()
             
             # Export comparison summary if requested
             if args.export_comparison_summary:

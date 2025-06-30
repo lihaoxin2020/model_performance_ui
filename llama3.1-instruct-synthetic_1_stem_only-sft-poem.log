@@ -1,0 +1,17 @@
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-gpqa:0shot_cot::scillm-111:01JYXEKNE40H3PZHDVQMHTB34T
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-mmlu_pro:0shot_cot::scillm-111:01JYXEKVKPFK3WGWV80XMPY85S
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-111:01JYXEM1ZTCHMJ1GSV96XKCZQ4
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-gpqa:0shot_cot::scillm-222:01JYXEQ8XK393QWSXARMF2ZR12
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-mmlu_pro:0shot_cot::scillm-222:01JYXEQFPKK27QV54K9XM2MMQZ
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-222:01JYXEQP7GTDH6P5MBRRGCTX6P
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-gpqa:0shot_cot::scillm-333:01JYXETEGFNHF4H2C94P2JSFR1
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-mmlu_pro:0shot_cot::scillm-333:01JYXETMNZVQYNZBVZ741ZDXJK
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-333:01JYXETV607E4TKR6KY5FQT7XT
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-gpqa:0shot_cot::scillm-444:01JYXEXW88MHXHB2A6PM313BN3
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-mmlu_pro:0shot_cot::scillm-444:01JYXEY2QZQW3H2CFHPGXQPQ89
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-444:01JYXEY8YX53R1QKGD3W1W9NKG
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-111:01JYXG9RPAE1YF2QWBXGB1996W
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-222:01JYXGAM9KEET9T0B7TCK5EWRT
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-333:01JYXGBTQRQYFKYMRP0BGE688S
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-444:01JYXGD0A2BYPCQ5X7K40RESJ1
+llama3.1-instruct-synthetic_1_stem_only-sft-poem-lab_bench:0shot_cot_knowledge::scillm-555:01JYXGE40EVXG0BCVAQ01Q1WY7
