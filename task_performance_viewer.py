@@ -46,7 +46,8 @@ from tabulate import tabulate
 class TaskPerformanceViewer:
     """Viewer for task-level performance metrics from lmeval results."""
     
-    def __init__(self, model_dir: str = None, filter_dataset: str = None, is_knowledge: bool = False, target_tasks: List[str] = None,
+    def __init__(self, model_dir: Optional[str] = None, filter_dataset: Optional[str] = None, 
+                 is_knowledge: bool = False, target_tasks: Optional[List[str]] = None,
                  default_input_cost_per_million: float = 1.0, default_output_cost_per_million: float = 3.0):
         """
         Initialize the viewer with a model directory and optional dataset filtering.
@@ -94,6 +95,13 @@ class TaskPerformanceViewer:
                 # Add more mappings as needed
             }
             
+            # Handle case where filter_dataset is None
+            if self.filter_dataset is None:
+                print("Warning: No filter dataset specified.")
+                self.reference_dataset = None
+                self.task_doc_mapping = {}
+                return
+                
             dataset_name = dataset_mapping.get(self.filter_dataset, self.filter_dataset)
             
             print(f"Loading reference dataset: {dataset_name}...")
@@ -134,18 +142,39 @@ class TaskPerformanceViewer:
         if not self.reference_dataset:
             return mapping
             
-        for item in self.reference_dataset['train']:
-            # Skip items with LitQA2, DbQA, or SuppQA in taskname
-            if any(x in item['taskname'] for x in ['LitQA2', 'DbQA', 'SuppQA']):
-                continue
-            task_name = item['taskname']
-            if self.is_knowledge:
-                if "gpqa" == task_name.lower():
-                    task_name = "gpqa_knowledge"
-                elif "mmlu_pro" in task_name.lower():
-                    task_name += "_knowledge"
-            doc_id = str(item['doc_id'])
-            mapping[(task_name, doc_id)] = True
+        try:
+            # Handle both Dataset and IterableDataset types
+            if hasattr(self.reference_dataset, 'get') and 'train' in self.reference_dataset:
+                dataset_split = self.reference_dataset['train']
+            else:
+                # Fallback for IterableDataset or other types
+                dataset_split = getattr(self.reference_dataset, 'train', None)
+                if dataset_split is None:
+                    print("Warning: Could not access train split of dataset")
+                    return mapping
+            
+            for item in dataset_split:
+                # Ensure item is treated as a dictionary
+                if not isinstance(item, dict):
+                    continue
+                    
+                # Skip items with LitQA2, DbQA, or SuppQA in taskname
+                taskname = item.get('taskname', '')
+                if any(x in taskname for x in ['LitQA2', 'DbQA', 'SuppQA']):
+                    continue
+                    
+                task_name = taskname
+                if self.is_knowledge:
+                    if "gpqa" == task_name.lower():
+                        task_name = "gpqa_knowledge"
+                    elif "mmlu_pro" in task_name.lower():
+                        task_name += "_knowledge"
+                        
+                doc_id = str(item.get('doc_id', ''))
+                mapping[(task_name, doc_id)] = True
+        except Exception as e:
+            print(f"Warning: Error processing dataset items: {e}")
+            
         return mapping
     
     def _should_include_metric(self, metric_data: Dict) -> bool:
@@ -183,9 +212,9 @@ class TaskPerformanceViewer:
     def _extract_model_name(self) -> str:
         """Extract model name from the directory path."""
         # If the directory name follows the pattern lmeval/model_name, extract model_name
-        if self.model_dir.parent.name == "lmeval":
+        if self.model_dir and self.model_dir.parent.name == "lmeval":
             return self.model_dir.name
-        return self.model_dir.name
+        return self.model_dir.name if self.model_dir else "unknown"
     
     def _parse_directory_name(self, dir_name: str) -> Tuple[str, str]:
         """
@@ -398,7 +427,7 @@ class TaskPerformanceViewer:
                 result['reported_cost_per_instance'] = result['total_price'] / result['num_instances']
     
     def _calculate_token_cost(self, input_tokens: float, output_tokens: float, 
-                             model_name: str = None, 
+                             model_name: Optional[str] = None, 
                              default_input_cost_per_million: float = 1.0,
                              default_output_cost_per_million: float = 3.0) -> float:
         """
@@ -423,7 +452,12 @@ class TaskPerformanceViewer:
             'gpt-4': {'input': 30.0, 'output': 60.0},
             'gpt-4.1': {'input': 2.0, 'output': 8.0},
             'o3-low': {'input': 2.0, 'output': 8.0},
+            'o3-high': {'input': 2.0, 'output': 8.0},
             'gpt-3.5-turbo': {'input': 0.5, 'output': 1.5},
+            'o3-mini-low': {'input': 1.1, 'output': 4.4},
+            'o3-mini-high': {'input': 1.1, 'output': 4.4},
+            'o4-mini-low': {'input': 1.1, 'output': 4.4},
+            'o4-mini-high': {'input': 1.1, 'output': 4.4},
             
             # Anthropic models
             'claude-3-opus': {'input': 15.0, 'output': 75.0},
@@ -434,23 +468,28 @@ class TaskPerformanceViewer:
             # DeepSeek models
             'deepseek-v3': {'input': 0.14, 'output': 0.28},
             'deepseek-v2.5': {'input': 0.14, 'output': 0.28},
-            'deepseek': {'input': 0.14, 'output': 0.28},
+            'deepseek-r1-05': {'input': 0.55, 'output': 2.19},
+            'deepseek-r1': {'input': 0.55, 'output': 2.19},
             
             # Alibaba Qwen models
             'qwen2.5': {'input': 0.4, 'output': 1.2},
-            'qwen': {'input': 0.4, 'output': 1.2},
+            'Qwen3-235B-A22B-fp8-tput': {'input': 0.2, 'output': 0.6},
+            'Qwen3-235B-A22B-fp8-tput-thinking': {'input': 0.2, 'output': 0.6},
+            'Qwen3-32B-thinking': {'input': 0.4, 'output': 1.2},
+            'Qwen3-32B': {'input': 0.4, 'output': 1.2},
             
             # Google models
             'gemini-pro': {'input': 0.5, 'output': 1.5},
             'gemini-flash': {'input': 0.075, 'output': 0.3},
-            'gemini-2.5-pro-preview-05-06-low': {'input': 1.25, 'output': 10.0},
+            'gemini2.5-pro-low': {'input': 1.25, 'output': 10.0},
             'gemini2.5-pro-high': {'input': 1.25, 'output': 10.0},
             
             # Meta models (estimated based on similar tiers)
             'llama-3.1-405b': {'input': 2.0, 'output': 6.0},
             'llama-3.1-70b': {'input': 0.4, 'output': 1.2},
             'llama-3.1-8b': {'input': 0.15, 'output': 0.6},
-            'llama': {'input': 0.4, 'output': 1.2},  # Default for llama models
+            'Llama-4-Maverick': {'input': 0.27, 'output': 0.85},  # Default for llama models
+            
             'claude-sonnet-4-low': {'input': 3.0, 'output': 15.0},
             'claude-sonnet-4-high': {'input': 3.0, 'output': 15.0},
         }
@@ -466,13 +505,15 @@ class TaskPerformanceViewer:
         used_default = True
         
         if model_name:
-            model_lower = model_name.lower()
             # Try exact matches first, then partial matches
             for model_key, model_pricing in pricing_map.items():
-                if model_key in model_lower:
+                if model_key == model_name:
                     pricing = model_pricing
                     used_default = False
                     break
+        
+        if used_default and model_name:
+            print(f"Using default pricing for model {model_name}: ${default_input_cost_per_million:.2f}/${default_output_cost_per_million:.2f} per M tokens")
         
         # Calculate cost (convert to millions of tokens)
         input_cost = (input_tokens / 1_000_000) * pricing['input']
@@ -663,7 +704,8 @@ class TaskPerformanceViewer:
     def _average_metrics_entries(self, metrics_entries: List[Dict], benchmark_name: str, is_aggregate: bool = False) -> Dict:
         """
         Average a list of metrics entries (either aggregates or individual tasks).
-        If there are at least 5 entries, also compute standard deviation as error range.
+        For cost metrics, only average over entries that have valid token counts.
+        If there are at least 3 entries, also compute standard deviation as error range.
         
         Args:
             metrics_entries: List of metrics dictionaries to average
@@ -675,21 +717,23 @@ class TaskPerformanceViewer:
         """
         if not metrics_entries:
             return {}
-        
 
         # Use first entry as template
         template = metrics_entries[0].copy()
         
-        # Numeric fields to average
-        numeric_fields = [
+        # Numeric fields to average (excluding cost metrics which need special handling)
+        standard_numeric_fields = [
             'primary_score', 'exact_match', 'exact_match_simple', 
             'max_tokens_reached', 'avg_tokens', 'total_price', 
             'answer_format_correct', 'time_per_instance',
             'f1_overlap', 'llm_score', 'f1_evidence_all', 'f1_label', 'f1_evidence_token',
-            # Token and cost metrics
+            # Token metrics (these determine if cost should be averaged)
             'input_tokens', 'output_tokens', 'reasoning_tokens', 'effective_output_tokens', 'num_tokens',
-            'total_tokens', 'calculated_total_cost', 'cost_per_instance', 'reported_cost_per_instance'
+            'total_tokens'
         ]
+        
+        # Cost metrics that should only be averaged over entries with valid token data
+        cost_metrics = ['calculated_total_cost', 'cost_per_instance', 'reported_cost_per_instance']
         
         # Collect values for each field
         field_values = {}
@@ -700,9 +744,24 @@ class TaskPerformanceViewer:
             # Sum instances
             total_instances += entry.get('num_instances', 0)
             
-            # Collect values for each numeric field
-            for field in numeric_fields:
+            # For cost metrics, check if this entry has valid token data
+            has_valid_tokens = (entry.get('input_tokens') is not None and 
+                              entry.get('effective_output_tokens') is not None) or \
+                             (entry.get('input_tokens') is not None and 
+                              entry.get('output_tokens') is not None)
+            
+            # Collect values for standard numeric fields
+            for field in standard_numeric_fields:
                 if entry.get(field) is not None:
+                    if field not in field_values:
+                        field_values[field] = []
+                        field_counts[field] = 0
+                    field_values[field].append(entry[field])
+                    field_counts[field] += 1
+            
+            # Collect values for cost metrics only if entry has valid tokens
+            for field in cost_metrics:
+                if entry.get(field) is not None and has_valid_tokens:
                     if field not in field_values:
                         field_values[field] = []
                         field_counts[field] = 0
@@ -713,17 +772,21 @@ class TaskPerformanceViewer:
         compute_std = len(metrics_entries) >= 3
         print(f"compute_std: {compute_std} with {len(metrics_entries)} entries")
         
-        for field in numeric_fields:
+        all_fields = standard_numeric_fields + cost_metrics
+        for field in all_fields:
             if field in field_values and field_counts[field] > 0:
                 values = field_values[field]
                 template[field] = sum(values) / len(values)
                 
-                # Compute standard deviation if we have at least 5 results
+                # Add debug info for cost metrics
+                if field in cost_metrics:
+                    print(f"  {field}: averaged {len(values)} entries with valid tokens out of {len(metrics_entries)} total")
+                
+                # Compute standard deviation if we have at least 2 results
                 if compute_std and len(values) >= 2:  # Need at least 2 values for std
                     try:
                         std_dev = statistics.stdev(values)
                         template[f'{field}_std'] = std_dev
-
                     except statistics.StatisticsError:
                         template[f'{field}_std'] = None
                 else:
@@ -787,7 +850,7 @@ class TaskPerformanceViewer:
     def create_comparison_table(self, models_data: Dict[str, Dict[str, List[Dict]]], 
                               metric_type: str = "primary_score",
                               show_aggregates_only: bool = True,
-                              comparison_dir: str = None) -> pd.DataFrame:
+                              comparison_dir: Optional[str] = None) -> pd.DataFrame:
         """
         Create a comparison table with models as rows and tasks as columns.
         
@@ -822,15 +885,9 @@ class TaskPerformanceViewer:
             model_row = {}
             
             for task_key in sorted(all_tasks):
-                # if task_key == 'lab_bench':
-                #     from IPython import embed; embed()
                 score = None
                 
                 # Parse task key to get benchmark and task name
-                # if '_' in task_key and not any(task_key.startswith(b + '_') for b in ['lab_bench', 'super_gpqa']):
-                #     benchmark_name = task_key.split('_')[0]
-                #     task_name = '_'.join(task_key.split('_')[1:])
-                # else:
                 benchmark_name = task_key
                 task_name = None
                 
@@ -893,7 +950,7 @@ class TaskPerformanceViewer:
                                format_type: str = "table",
                                show_aggregates_only: bool = True,
                                precision: int = 4,
-                               comparison_dir: str = None):
+                               comparison_dir: Optional[str] = None):
         """
         Display a comparison table of models vs tasks.
         
@@ -961,7 +1018,7 @@ class TaskPerformanceViewer:
         
         if format_type == "table":
             try:
-                print(tabulate(df_display, headers=df_display.columns, tablefmt="grid", stralign="center"))
+                print(tabulate(df_display, headers=list(df_display.columns), tablefmt="grid", stralign="center"))
             except Exception as e:
                 print(f"Error in tabulate: {e}")
                 import traceback
@@ -1085,7 +1142,7 @@ class TaskPerformanceViewer:
     def create_comparison_table_with_averages(self, models_data: Dict[str, Dict[str, List[Dict]]], 
                                             metric_type: str = "primary_score",
                                             show_aggregates_only: bool = True,
-                                            comparison_dir: str = None) -> pd.DataFrame:
+                                            comparison_dir: Optional[str] = None) -> pd.DataFrame:
         """
         Create a comparison table that includes calculated averages as additional columns.
         This ensures exported data matches displayed averages.
@@ -2018,7 +2075,7 @@ class TaskPerformanceViewer:
 
     def _compute_micro_averaged_score(self, models_data: Dict[str, Dict[str, List[Dict]]], 
                                     metric_type: str = "primary_score",
-                                    model_dirs: Dict[str, Path] = None) -> Dict[str, float]:
+                                    model_dirs: Optional[Dict[str, Path]] = None) -> Dict[str, float]:
         """
         Compute micro-averaged scores for filtered datasets by analyzing actual prediction files.
         This loads the raw prediction files and filters individual instances, then computes
@@ -2216,7 +2273,8 @@ class TaskPerformanceViewer:
             return self.task_doc_mapping.get((row_task, str(doc_id)), False)
             
         matching_mask = predictions_df.apply(is_match, axis=1)
-        return predictions_df[matching_mask]
+        # Ensure we return a DataFrame by using boolean indexing
+        return pd.DataFrame(predictions_df.loc[matching_mask])
     
     def _calculate_accuracy_series(self, filtered_df: pd.DataFrame) -> Optional[pd.Series]:
         """
@@ -2243,11 +2301,11 @@ class TaskPerformanceViewer:
         
         # Calculate accuracy - using existing metrics if available
         if 'exact_match_flex' in filtered_df.columns:
-            return filtered_df['exact_match_flex']
+            return pd.Series(filtered_df['exact_match_flex'])
         elif 'exact_match_simple' in filtered_df.columns:
-            return filtered_df['exact_match_simple']
+            return pd.Series(filtered_df['exact_match_simple'])
         elif 'correctness' in filtered_df.columns:
-            return filtered_df['correctness']
+            return pd.Series(filtered_df['correctness'])
         elif 'metrics' in filtered_df.columns:
             # Look for metrics within a metrics field
             def extract_metric(row):
@@ -2258,12 +2316,13 @@ class TaskPerformanceViewer:
                 return None
             
             metrics = filtered_df.apply(extract_metric, axis=1)
+            # Check if metrics has any non-null values
             if not metrics.isna().all():
-                return metrics
+                return pd.Series(metrics)
             elif 'prediction' in filtered_df.columns and 'label' in filtered_df.columns:
-                return (filtered_df['prediction'] == filtered_df['label']).astype(int)
+                return pd.Series((filtered_df['prediction'] == filtered_df['label']).astype(int))
         elif 'prediction' in filtered_df.columns and 'label' in filtered_df.columns:
-            return (filtered_df['prediction'] == filtered_df['label']).astype(int)
+            return pd.Series((filtered_df['prediction'] == filtered_df['label']).astype(int))
         
         return None
 

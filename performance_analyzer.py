@@ -38,7 +38,8 @@ class ModelPerformanceAnalyzer:
         self.reference_dataset = load_dataset(dataset_name)
         # self.math_reference_dataset = load_dataset("ArpanSarkar/merged_bench_annotated")
         # self.math_reference_dataset = load_dataset("ArpanSarkar/merged_bench_annotated_nonmath")
-        self.math_reference_dataset = load_dataset("ArpanSarkar/merged_bench_no_numbers")
+        # self.math_reference_dataset = load_dataset("ArpanSarkar/merged_bench_no_numbers")
+        self.math_reference_dataset = load_dataset("ArpanSarkar/SciReasBench-Pro")
         print(f"Dataset loaded with {len(self.reference_dataset['train'])} instances")
         self.task_doc_mapping = self._create_task_doc_mapping()
         self.math_mapping = self._create_math_mapping()
@@ -104,6 +105,7 @@ class ModelPerformanceAnalyzer:
         mapping = {}
         has_requires_math_field = 'requires_math' in self.math_reference_dataset['train'].features
         has_math_numbers_field = 'has_math_numbers' in self.math_reference_dataset['train'].features
+        has_manual_math_field = 'manual_is_math' in self.math_reference_dataset['train'].features
         for item in self.math_reference_dataset['train']:
             task_name = item['taskname']
             doc_id = item['doc_id']
@@ -114,7 +116,9 @@ class ModelPerformanceAnalyzer:
                 elif "mmlu_pro" in task_name.lower():
                     task_name += "_knowledge"
             
-            if has_requires_math_field or has_math_numbers_field:
+            if has_manual_math_field:
+                requires_math = item.get('manual_is_math', False) == "Y"
+            elif has_requires_math_field or has_math_numbers_field:
                 # Use the actual field if available
                 requires_math = item.get('requires_math', "NO") == "YES" or item.get('has_math_numbers', "NO") == "YES"
             else:

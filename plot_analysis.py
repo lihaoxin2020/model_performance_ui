@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from io import StringIO
+from matplotlib.lines import Line2D
 
 # Re‑use the same raw table
 raw_data = """model gpqa lab_bench mmlu olympiadbench scibench scieval sciknoweval sciriff supergpqa ugphysics avg
@@ -71,14 +72,17 @@ deepseek-r1-05 0.4430894309
 
 scireas_df = pd.read_csv(StringIO(scireas_raw), sep=" ")
 merged = pd.merge(df_avg, scireas_df, on="model", how="inner")
-corr_val = merged["avg"].corr(merged["scireas"])
 
-# -------------- Create single figure with 4 horizontal subplots -----------------
-fig, axes = plt.subplots(1, 4, figsize=(20, 3.5))
+# Calculate correlations for subplots (b) and (c)
+corr_scibench = df["avg"].corr(df["scibench"])
+corr_mmlu = df["avg"].corr(df["mmlu"])
+
+# -------------- Create single figure with 3 horizontal subplots -----------------
+fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 
 # Create color mapping for models
 unique_models = df["model"].unique()
-colors = plt.cm.tab20(np.linspace(0, 1, len(unique_models)))
+colors = plt.cm.get_cmap('tab20')(np.linspace(0, 1, len(unique_models)))
 model_colors = dict(zip(unique_models, colors))
 
 # Create mapping from technical names to display names
@@ -119,43 +123,35 @@ corr = df[score_cols].corr()
 im = axes[0].imshow(corr.values, cmap='viridis')
 axes[0].set_xticks(np.arange(len(score_cols)))
 axes[0].set_yticks(np.arange(len(score_cols)))
-axes[0].set_xticklabels(score_cols, rotation=45, ha="right", fontsize=8)
-axes[0].set_yticklabels(score_cols, fontsize=8)
+axes[0].set_xticklabels(score_cols, rotation=45, ha="right", fontsize=12)
+axes[0].set_yticklabels(score_cols, fontsize=12)
 
 # Annotate each cell with the value
 for i in range(len(score_cols)):
     for j in range(len(score_cols)):
-        axes[0].text(j, i, f"{corr.values[i, j]:.2f}", ha="center", va="center", fontsize=6, color="white")
+        axes[0].text(j, i, f"{corr.values[i, j]:.2f}", ha="center", va="center", fontsize=10, color="white")
 
-axes[0].set_title("(a) Benchmark Correlation", fontsize=12, pad=10)
+axes[0].set_title("(a) SciReasBench Correlation", fontsize=16, pad=15)
 
-# Subplot 2: Overall Average vs GPQA (with color coding)
+# Subplot 2: Overall Average vs SciBench (with color coding and correlation)
 for i, txt in enumerate(df["model"]):
-    axes[1].scatter(df["avg"][i], df["scibench"][i], s=50, alpha=0.8, 
-                   color=model_colors[txt], label=txt if i < len(unique_models) else "")
-axes[1].set_xlabel("SciReasBench Average", fontsize=10)
-axes[1].set_ylabel("SciBench Score", fontsize=10)
-axes[1].set_title("(b) Overall vs SciBench", fontsize=12)
-axes[1].grid(True, linestyle=":", alpha=0.5)
-
-# Subplot 3: Overall Average vs MMLU-Pro (with color coding)
-for i, txt in enumerate(df["model"]):
-    axes[2].scatter(df["avg"][i], df["mmlu"][i], s=50, alpha=0.8, 
+    axes[1].scatter(df["avg"][i], df["scibench"][i], s=80, alpha=0.8, 
                    color=model_colors[txt])
-axes[2].set_xlabel("SciReasBench Average", fontsize=10)
-axes[2].set_ylabel("MMLU-Pro Score", fontsize=10)
-axes[2].set_title("(c) Overall vs MMLU-Pro", fontsize=12)
-axes[2].grid(True, linestyle=":", alpha=0.5)
+axes[1].set_xlabel("SciReasBench Average", fontsize=14)
+axes[1].set_ylabel("SciBench Score", fontsize=14)
+axes[1].set_title(f"(b)SciReasBench vs SciBench(ρ = {corr_scibench:.2f})", fontsize=16)
+axes[1].grid(True, linestyle=":", alpha=0.5)
+axes[1].tick_params(axis='both', which='major', labelsize=12)
 
-# Subplot 4: Overall Average vs SciReasBench-Pro (with color coding)
-for _, row in merged.iterrows():
-    if "o4-mini" not in row["model"] and "o3-mini" not in row["model"]:
-        axes[3].scatter(row["avg"], row["scireas"], s=50, alpha=0.8, 
-                        color=model_colors[row["model"]])
-axes[3].set_xlabel("SciReasBench Average", fontsize=10)
-axes[3].set_ylabel("SciReasBench-Pro Score", fontsize=10)
-axes[3].set_title(f"(d) Overall vs SciReasBench (ρ = {corr_val:.2f})", fontsize=12)
-axes[3].grid(True, linestyle=":", alpha=0.5)
+# Subplot 3: Overall Average vs MMLU-Pro (with color coding and correlation)
+for i, txt in enumerate(df["model"]):
+    axes[2].scatter(df["avg"][i], df["mmlu"][i], s=80, alpha=0.8, 
+                   color=model_colors[txt])
+axes[2].set_xlabel("SciReasBench Average", fontsize=14)
+axes[2].set_ylabel("MMLU-Pro* Score", fontsize=14)
+axes[2].set_title(f"(c)SciReasBench vs MMLU-Pro* (ρ = {corr_mmlu:.2f})", fontsize=16)
+axes[2].grid(True, linestyle=":", alpha=0.5)
+axes[2].tick_params(axis='both', which='major', labelsize=12)
 
 # Add a shared legend on the right side
 # Create handles and labels in model_display_names order
@@ -163,30 +159,32 @@ handles = []
 display_labels = []
 for model in model_display_names:
     if model in model_colors:
-        handles.append(plt.Line2D([0], [0], marker='o', color='w', 
+        handles.append(Line2D([0], [0], marker='o', color='w', 
                                 markerfacecolor=model_colors[model],
-                                markersize=8, label=model_display_names[model], 
+                                markersize=10, label=model_display_names[model], 
                                 alpha=0.8))
         display_labels.append(model_display_names[model])
 
 fig.legend(handles, display_labels, loc='center left',
-          bbox_to_anchor=(0.85, 0.5), ncol=1, fontsize=9)
+          bbox_to_anchor=(0.82, 0.5), ncol=1, fontsize=12)
 
 # Adjust layout with reduced spacing and save
-plt.subplots_adjust(wspace=0.25, right=0.85)  # Add right margin for legend
+plt.subplots_adjust(wspace=0.3, right=0.82)  # Add right margin for legend
 combined_path = "./combined_analysis_figure.png"
 fig.savefig(combined_path, dpi=300, bbox_inches='tight')
 
 plt.show()
 
 print(f"Saved combined figure: {combined_path}")
+print(f"Correlation SciBench: {corr_scibench:.3f}")
+print(f"Correlation MMLU-Pro: {corr_mmlu:.3f}")
 
 # Optional: Save ranking shift table for reference
 merged["rank_avg"] = merged["avg"].rank(ascending=False, method='min')
 merged["rank_scireas"] = merged["scireas"].rank(ascending=False, method='min')
 merged["shift"] = merged["rank_avg"] - merged["rank_scireas"]
 
-shift_table = merged[["model","rank_avg","rank_scireas","shift"]].sort_values("rank_scireas")
+shift_table = merged[["model","rank_avg","rank_scireas","shift"]].sort_values(by="rank_scireas")
 shift_path = "./rank_shifts.csv"
 shift_table.to_csv(shift_path, index=False)
 
